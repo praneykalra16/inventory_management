@@ -1,0 +1,8 @@
+barcode_generator==0.1rc15
+Pillow~=10.4.0
+Pillow==10.4.0
+pywin32==306
+tqdm==4.66.2
+ttkthemes==3.2.2
+future~=1.0.0
+barcode~=1.0.4

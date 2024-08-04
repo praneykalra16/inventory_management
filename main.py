@@ -1,14 +1,26 @@
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import ttk, messagebox
 import sqlite3
 import barcode
 from barcode.writer import ImageWriter
 from PIL import Image, ImageTk
 from io import BytesIO
+import csv
+from ttkthemes import ThemedTk
+import subprocess
 import os
+from PIL import ImageWin
+import win32print
+import win32ui
+from customer_log import open_customer_log
+# Global lists for barcode images and features
+barcode_images = []
+features_list = []
 
-# Global variable for barcode image
-barcode_image = None
+
+# Run the new.py script
+def run_new_script():
+    subprocess.run(["python", "new.py"], check=True)
 
 
 # Database setup
@@ -21,27 +33,72 @@ def init_db():
             reel_no TEXT,
             size TEXT,
             bf TEXT,
-            gsm TEXT
+            gsm TEXT,
+            barcode str
         )
     ''')
     conn.commit()
     conn.close()
 
 
-# Initialize the database
+# Initialize the database and run new.py script
 init_db()
+run_new_script()
 
 
 # Function to save product and generate barcode
-def save_product():
-    global barcode_image  # Declare barcode_image as global
+def get_last_id():
+    conn = sqlite3.connect('products.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT MAX(id) FROM products')
+    last_id = cursor.fetchone()[0] or 0
+    conn.close()
+    return last_id
 
-    reel_no = entry_reel_no.get()
+
+import string
+
+
+def generate_reel_no(last_id):
+    def increment_string(s):
+        """Increment a string in a way similar to incrementing numbers"""
+        s = list(s)
+        for i in reversed(range(len(s))):
+            if s[i] == 'z':
+                s[i] = 'a'
+            else:
+                s[i] = chr(ord(s[i]) + 1)
+                break
+        return ''.join(s)
+
+    last_id = int(last_id) if last_id else 0
+    base = 26 * 1000
+    length = 1
+    while last_id >= base:
+        length += 1
+        base *= 26
+
+    reel_base = string.ascii_lowercase
+    reel_no = ''
+    for _ in range(length):
+        reel_no = increment_string(reel_no)
+
+    # Ensure reel_no is not empty
+    reel_no = reel_no or 'a'
+    return f'{reel_no}{last_id % 1000 + 1}'
+
+
+def save_product():
+    global barcode_images, features_list
+
+    # Get the last product ID and generate the next reel number
+    last_id = get_last_id()
+    reel_no = generate_reel_no(last_id)
     size = entry_size.get()
     bf = entry_bf.get()
     gsm = entry_gsm.get()
 
-    if not all([reel_no, size, bf, gsm]):
+    if not all([size, bf, gsm]):
         messagebox.showerror("Error", "All fields are required!")
         return
 
@@ -52,52 +109,143 @@ def save_product():
         VALUES (?, ?, ?, ?)
     ''', (reel_no, size, bf, gsm))
     product_id = cursor.lastrowid
-    conn.commit()
-    conn.close()
 
     # Generate barcode
     barcode_str = f'{product_id:012d}'
-    ean = barcode.get('ean13', barcode_str, writer=ImageWriter())
+    ean = barcode.get('ean13')(barcode_str, writer=ImageWriter())
+    full_barcode_str = ean.get_fullcode()
     buffer = BytesIO()
     ean.write(buffer)
 
-    # Save barcode image to global variable
+    # Save barcode image to list
     barcode_image = Image.open(buffer)
+    barcode_images.append(barcode_image)
 
-    # Display barcode image in Tkinter Label
-    barcode_photo = ImageTk.PhotoImage(barcode_image)
-    barcode_label.config(image=barcode_photo)
-    barcode_label.image = barcode_photo
+    # Save the full barcode number (including check digit) in the database
+    cursor.execute('''
+        UPDATE products SET barcode = ? WHERE id = ?
+    ''', (full_barcode_str, product_id))
+    conn.commit()
+    conn.close()
 
     # Display product features
     features_text = f"Reel No.: {reel_no}\nSize: {size}\nBF: {bf}\nGSM: {gsm}"
-    features_label.config(text=features_text)
+    features_list.append(features_text)
+
+    # Update the Text widget to show the new product label
+    labels_display.insert(tk.END, features_text + "\n\n")
+    labels_display.yview(tk.END)  # Auto-scroll to the end
 
     # Show success message
     messagebox.showinfo("Success", "Product saved and barcode generated!")
 
+    # Run new.py script
+    run_new_script()
+
+
+
+def preview_print():
+    global barcode_images, features_list  # Access the global lists
+
+    if not barcode_images:
+        messagebox.showerror("Error", "Generate a barcode first!")
+        return
+
+    # Create a new window for the preview
+    preview_window = tk.Toplevel(root)
+    preview_window.title("Print Preview")
+
+    canvas = tk.Canvas(preview_window, width=595, height=842)  # A4 size in points (1/72 of an inch)
+    canvas.pack()
+
+    x_offset = 50  # Initial x offset for the barcode images
+    y_offset = 50  # Initial y offset for the barcode images
+    photo_images = []  # List to keep references to PhotoImage objects
+
+    for i, (barcode_image, features_text) in enumerate(zip(barcode_images, features_list)):
+        # Draw the barcode image on the canvas
+        barcode_image_resized = barcode_image.resize((200, 100))  # Resize for better fit
+        barcode_photo = ImageTk.PhotoImage(barcode_image_resized)
+        canvas.create_image(x_offset, y_offset, anchor=tk.NW, image=barcode_photo)
+        photo_images.append(barcode_photo)  # Store the reference
+
+        # Draw the text below the barcode image
+        text_x = x_offset
+        text_y = y_offset + 110  # Position below the barcode image
+        for line in features_text.split('\n'):
+            canvas.create_text(text_x, text_y, anchor=tk.NW, text=line, font=("Helvetica", 12))
+            text_y += 20  # Line spacing
+
+        # Update the x offset for the next barcode image
+        x_offset += 220  # Adjust the x offset to position the next barcode side by side
+
+        # Move to the next row if the barcodes exceed the canvas width
+        if x_offset + 220 > 595:
+            x_offset = 50
+            y_offset += 250
+
+    # Show the preview window
+    preview_window.mainloop()
+
 
 # Function to print label
 def print_label():
-    global barcode_image  # Access the global barcode_image
+    global barcode_images, features_list  # Access the global lists
 
-    if barcode_image is None:
+    if not barcode_images:
         messagebox.showerror("Error", "Generate a barcode first!")
         return
 
     # Replace this with the actual command or library function for your label printer
     # For demonstration, we will print to console
-    features_text = features_label.cget("text")
-    print(f"Printing label...\n{features_text}")
+    for features_text in features_list:
+        print(f"Printing label...\n{features_text}")
 
-    # Optionally, you can also print the barcode image
-    # This requires converting ImageTk format back to PIL Image
-    barcode_image_pil = barcode_image.copy()
-    barcode_image_pil.save('barcode.png', 'PNG')
+    # Optionally, you can also print the barcode images
+    for barcode_image in barcode_images:
+        # This requires converting ImageTk format back to PIL Image
+        barcode_image_pil = barcode_image.copy()
+        barcode_image_pil.save('barcode.png', 'PNG')
 
-    # Simulate printing barcode image (you need to adjust this part based on your label printer)
-    print("Printing barcode image...")
-    os.system('lp barcode.png')  # Example for Unix-like systems using CUPS
+        # Simulate printing barcode image (you need to adjust this part based on your label printer)
+        print("Printing barcode image...")
+
+        # Open the printer
+        printer_name = win32print.GetDefaultPrinter()
+        hprinter = win32print.OpenPrinter(printer_name)
+
+        try:
+            # Start a print job
+            hdc = win32ui.CreateDC()
+            hdc.CreatePrinterDC(printer_name)
+            hdc.StartDoc("Barcode Label")
+            hdc.StartPage()
+
+            # Set up the print area and dimensions for A4 paper
+            a4_width = 2100  # A4 width in tenths of a millimeter (210 mm)
+            a4_height = 2970  # A4 height in tenths of a millimeter (297 mm)
+            margins = 100  # Margins in tenths of a millimeter (10 mm)
+
+            # Print the barcode image
+            img_width, img_height = barcode_image_pil.size
+            img_x = margins
+            img_y = margins
+            img_rect = (img_x, img_y, img_x + img_width, img_y + img_height)
+            bmp = ImageWin.Dib(barcode_image_pil)
+            bmp.draw(hdc.GetHandleOutput(), img_rect)
+
+            # Print the text below the barcode image
+            text_x = margins
+            text_y = img_y + img_height + 20  # 20 tenths of a millimeter below the image
+            hdc.TextOut(text_x, text_y, features_text)
+
+            # End the page and document
+            hdc.EndPage()
+            hdc.EndDoc()
+
+        finally:
+            # Close the printer handle
+            win32print.ClosePrinter(hprinter)
 
 
 # Function to handle barcode scanning
@@ -107,29 +255,34 @@ def scan_barcode():
         messagebox.showerror("Error", "Please enter a barcode value!")
         return
 
+    print(f"Scanning barcode: {barcode_value}")  # Debug statement
     # Check if the product exists in the database
     conn = sqlite3.connect('products.db')
     cursor = conn.cursor()
-    cursor.execute('SELECT * FROM products WHERE id=?', (barcode_value,))
+    cursor.execute('SELECT * FROM products WHERE barcode=?', (barcode_value,))
     product = cursor.fetchone()
 
     if product:
+        print(f"Product found: {product}")  # Debug statement
+
         # Add product to the list for printing
         listbox_products.insert(tk.END,
                                 f"ID: {product[0]}, Reel No.: {product[1]}, Size: {product[2]}, BF: {product[3]}, GSM: {product[4]}")
 
         # Remove product from the database
-        cursor.execute('DELETE FROM products WHERE id=?', (barcode_value,))
+        cursor.execute('DELETE FROM products WHERE barcode=?', (barcode_value,))
         conn.commit()
         conn.close()
 
         # Show success message
         messagebox.showinfo("Success", "Product scanned and removed from database!")
     else:
+        print("Product not found")  # Debug statement
         messagebox.showerror("Error", "Product not found in database!")
 
     # Clear barcode entry field
     barcode_entry.delete(0, tk.END)
+    run_new_script()
 
 
 # Function to print scanned list
@@ -149,51 +302,159 @@ def print_scanned_list():
     listbox_products.delete(0, tk.END)
 
 
-# Setup GUI
-root = tk.Tk()
+# Function to delete a row from the CSV file and database
+def delete_csv_row(row_index):
+    temp_file = 'temp_products_export.csv'
+    product_id = None
+
+    with open('products_export.csv', 'r') as csvfile, open(temp_file, 'w', newline='') as temp_csvfile:
+        reader = csv.reader(csvfile)
+        writer = csv.writer(temp_csvfile)
+
+        for i, row in enumerate(reader):
+            if i == row_index:
+                product_id = row[0]  # Assuming the first column is the product ID
+            else:
+                writer.writerow(row)
+
+    os.replace(temp_file, 'products_export.csv')
+
+    if product_id:
+        conn = sqlite3.connect('products.db')
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM products WHERE id=?', (product_id,))
+        conn.commit()
+        conn.close()
+
+
+# Function to open a new window with CSV data
+def open_csv_window():
+    csv_window = tk.Toplevel(root)
+    csv_window.title("CSV Data")
+
+    frame = ttk.Frame(csv_window)
+    frame.pack(padx=20, pady=20, fill=tk.BOTH, expand=True)
+
+    canvas = tk.Canvas(frame)
+    scrollbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=canvas.yview)
+    canvas.configure(yscrollcommand=scrollbar.set)
+
+    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+    canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    listbox_frame = ttk.Frame(canvas)
+    canvas.create_window((0, 0), window=listbox_frame, anchor=tk.NW)
+
+    def on_delete_button_click(row_index):
+        delete_csv_row(row_index + 1)
+        update_listbox()
+
+    def update_listbox():
+        for widget in listbox_frame.winfo_children():
+            widget.destroy()  # Clear the old frame
+
+        with open('products_export.csv', 'r') as csvfile:
+            reader = csv.reader(csvfile)
+            for row_index, row in enumerate(reader):
+                row_text = ', '.join(row)
+                row_label = ttk.Label(listbox_frame, text=row_text)
+                row_label.grid(row=row_index, column=0, sticky='w')
+
+                delete_button = ttk.Button(listbox_frame, text="Delete",
+                                           command=lambda i=row_index: on_delete_button_click(i))
+                delete_button.grid(row=row_index, column=1, sticky='e')
+
+        listbox_frame.update_idletasks()
+        canvas.config(scrollregion=canvas.bbox("all"))
+
+    update_listbox()
+
+
+# Function to toggle full screen
+def toggle_fullscreen(event=None):
+    root.state('zoomed')
+
+
+# Main application window
+root = ThemedTk(theme="breeze")
 root.title("Product Management")
+root.geometry("800x500")
 
-# Labels and Entry fields
-tk.Label(root, text="Reel No.:").grid(row=0, column=0, padx=10, pady=5)
-entry_reel_no = tk.Entry(root)
-entry_reel_no.grid(row=0, column=1, padx=10, pady=5)
+# Create a scrollable frame
+main_frame = ttk.Frame(root)
+main_frame.pack(fill=tk.BOTH, expand=True)
 
-tk.Label(root, text="Size:").grid(row=1, column=0, padx=10, pady=5)
-entry_size = tk.Entry(root)
-entry_size.grid(row=1, column=1, padx=10, pady=5)
+canvas = tk.Canvas(main_frame)
+scrollbar = ttk.Scrollbar(main_frame, orient=tk.VERTICAL, command=canvas.yview)
+scrollable_frame = ttk.Frame(canvas)
 
-tk.Label(root, text="BF:").grid(row=2, column=0, padx=10, pady=5)
-entry_bf = tk.Entry(root)
-entry_bf.grid(row=2, column=1, padx=10, pady=5)
+scrollable_frame.bind(
+    "<Configure>",
+    lambda e: canvas.configure(
+        scrollregion=canvas.bbox("all")
+    )
+)
 
-tk.Label(root, text="GSM:").grid(row=3, column=0, padx=10, pady=5)
-entry_gsm = tk.Entry(root)
-entry_gsm.grid(row=3, column=1, padx=10, pady=5)
+canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+canvas.configure(yscrollcommand=scrollbar.set)
 
-# Buttons for Save, Generate Barcode, and Print Label
-tk.Button(root, text="Save and Generate Barcode", command=save_product).grid(row=4, columnspan=2, pady=10)
-tk.Button(root, text="Print Label", command=print_label).grid(row=5, columnspan=2, pady=10)
+canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-# Barcode scanning section
-tk.Label(root, text="Scan Barcode:").grid(row=6, column=0, padx=10, pady=5)
-barcode_entry = tk.Entry(root)
-barcode_entry.grid(row=6, column=1, padx=10, pady=5)
-tk.Button(root, text="Scan", command=scan_barcode).grid(row=6, column=2, padx=10, pady=5)
+# Create a frame to hold input fields and label display
+input_frame = ttk.Frame(scrollable_frame)
+input_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
 
-# Listbox to display scanned products
-tk.Label(root, text="Scanned Products:").grid(row=7, column=0, padx=10, pady=5)
-listbox_products = tk.Listbox(root, width=50, height=10)
-listbox_products.grid(row=8, column=0, columnspan=3, padx=10, pady=5)
+# Input fields
+ttk.Label(input_frame, text="Size:").grid(row=0, column=0, padx=10, pady=10)
+entry_size = ttk.Entry(input_frame)
+entry_size.grid(row=0, column=1, padx=10, pady=10)
 
-# Button to print scanned list
-tk.Button(root, text="Print Scanned List", command=print_scanned_list).grid(row=9, columnspan=3, pady=10)
+ttk.Label(input_frame, text="BF:").grid(row=1, column=0, padx=10, pady=10)
+entry_bf = ttk.Entry(input_frame)
+entry_bf.grid(row=1, column=1, padx=10, pady=10)
 
-# Label to display barcode image
-barcode_label = tk.Label(root)
-barcode_label.grid(row=10, columnspan=3, pady=10)
+ttk.Label(input_frame, text="GSM:").grid(row=2, column=0, padx=10, pady=10)
+entry_gsm = ttk.Entry(input_frame)
+entry_gsm.grid(row=2, column=1, padx=10, pady=10)
 
-# Label to display product features
-features_label = tk.Label(root, justify=tk.LEFT)
-features_label.grid(row=11, columnspan=3, pady=10)
+# Save button
+save_button = ttk.Button(input_frame, text="Save Product", command=save_product)
+save_button.grid(row=3, column=0, columnspan=2, padx=10, pady=10)
 
+# Labels display
+labels_display = tk.Text(scrollable_frame, height=10, width=30, wrap=tk.WORD)
+labels_display.grid(row=0, column=1, rowspan=3, padx=10, pady=10, sticky="ns")
+
+# Print and Preview buttons
+print_button = ttk.Button(scrollable_frame, text="Print Label", command=print_label)
+print_button.grid(row=4, column=0, padx=10, pady=10)
+
+preview_button = ttk.Button(scrollable_frame, text="Preview Label", command=preview_print)
+preview_button.grid(row=4, column=1, padx=10, pady=10)
+
+btn_customer_log = ttk.Button(scrollable_frame, text="Customer Log", command=open_customer_log)  # Add this button
+btn_customer_log.grid(row=0, column=2, padx=5, pady=5)
+# Barcode scanning
+ttk.Label(scrollable_frame, text="Enter Barcode:").grid(row=5, column=0, padx=10, pady=10)
+barcode_entry = ttk.Entry(scrollable_frame)
+barcode_entry.grid(row=5, column=1, padx=10, pady=10)
+scan_button = ttk.Button(scrollable_frame, text="Scan Barcode", command=scan_barcode)
+scan_button.grid(row=5, column=2, padx=10, pady=10)
+
+# Listbox for scanned products
+listbox_products = tk.Listbox(scrollable_frame)
+listbox_products.grid(row=6, column=0, columnspan=3, padx=10, pady=10)
+
+# Print scanned list button
+print_list_button = ttk.Button(scrollable_frame, text="Print Scanned List", command=print_scanned_list)
+print_list_button.grid(row=7, column=0, columnspan=3, padx=10, pady=10)
+
+# Open CSV data window button
+csv_button = ttk.Button(scrollable_frame, text="Open CSV Data", command=open_csv_window)
+csv_button.grid(row=8, column=0, columnspan=3, padx=10, pady=10)
+
+# Bind the F11 key to toggle fullscreen mode
+root.bind("<F11>", toggle_fullscreen)
+
+# Run the application
 root.mainloop()
