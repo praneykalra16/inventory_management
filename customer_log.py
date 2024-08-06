@@ -1,104 +1,124 @@
-import tkinter as tk
-from tkinter import ttk, messagebox
 import sqlite3
+from tkinter import *
+from tkinter import messagebox
 
-# Initialize customer database
-def init_customer_db():
-    conn = sqlite3.connect('customers.db')
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS customers (
-            id INTEGER PRIMARY KEY,
-            name TEXT UNIQUE
-        )
-    ''')
-    conn.commit()
-    conn.close()
+# Create and connect to the SQLite database
+conn = sqlite3.connect('order_management.db')
+c = conn.cursor()
 
-# Function to add a new customer
-def add_new_customer():
+# Create tables
+c.execute('''CREATE TABLE IF NOT EXISTS customers (
+             id INTEGER PRIMARY KEY AUTOINCREMENT,
+             name TEXT NOT NULL)''')
+
+c.execute('''CREATE TABLE IF NOT EXISTS order_details (
+             id INTEGER PRIMARY KEY AUTOINCREMENT,
+             bf TEXT NOT NULL,
+             size TEXT NOT NULL,
+             gsm INTEGER NOT NULL,
+             type TEXT NOT NULL CHECK(type IN ('s', 'r')),
+             qty INTEGER NOT NULL,
+             currDate TEXT NOT NULL,
+             customerID INTEGER NOT NULL,
+             FOREIGN KEY(customerID) REFERENCES customers(id))''')
+
+conn.commit()
+
+# Function to add a new customer and their order
+def add_customer():
     def save_customer():
-        customer_name = entry_customer_name.get()
-        if not customer_name:
-            messagebox.showerror("Error", "Customer name is required!")
-            return
+        name = name_entry.get()
+        bf = bf_entry.get()
+        size = size_entry.get()
+        gsm = gsm_entry.get()
+        type_ = type_var.get()
+        qty = qty_entry.get()
+        currDate = currDate_entry.get()
 
-        conn = sqlite3.connect('customers.db')
-        cursor = conn.cursor()
-        try:
-            cursor.execute('INSERT INTO customers (name) VALUES (?)', (customer_name,))
-            cursor.execute(f'''
-                CREATE TABLE IF NOT EXISTS "{customer_name}" (
-                    id INTEGER PRIMARY KEY,
-                    size TEXT,
-                    type TEXT,
-                    gsm TEXT,
-                    qty INTEGER
-                )
-            ''')
+        if name and bf and size and gsm and type_ and qty:
+            c.execute("INSERT INTO customers (name) VALUES (?)", (name,))
+            customer_id = c.lastrowid
+            c.execute("INSERT INTO order_details (bf, size, gsm, type, qty, currDate, customerID) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                      (bf, size, gsm, type_, qty, currDate, customer_id))
             conn.commit()
-            messagebox.showinfo("Success", f"Customer '{customer_name}' added successfully!")
-        except sqlite3.IntegrityError:
-            messagebox.showerror("Error", f"Customer '{customer_name}' already exists!")
-        finally:
-            conn.close()
-            new_customer_window.destroy()
-
-    new_customer_window = tk.Toplevel()
-    new_customer_window.title("Add New Customer")
-
-    ttk.Label(new_customer_window, text="Customer Name:").grid(row=0, column=0, padx=5, pady=5)
-    entry_customer_name = ttk.Entry(new_customer_window)
-    entry_customer_name.grid(row=0, column=1, padx=5, pady=5)
-
-    btn_save_customer = ttk.Button(new_customer_window, text="Save", command=save_customer)
-    btn_save_customer.grid(row=1, column=0, columnspan=2, padx=5, pady=10)
-
-# Function to search for an existing customer
-def search_customer():
-    def find_customer():
-        customer_name = entry_search.get()
-        if not customer_name:
-            messagebox.showerror("Error", "Please enter a customer name!")
-            return
-
-        conn = sqlite3.connect('customers.db')
-        cursor = conn.cursor()
-        cursor.execute('SELECT name FROM customers WHERE name=?', (customer_name,))
-        customer = cursor.fetchone()
-
-        if customer:
-            messagebox.showinfo("Found", f"Customer '{customer_name}' exists in the database.")
+            messagebox.showinfo("Success", "Customer and order details added successfully!")
+            add_customer_window.destroy()
         else:
-            messagebox.showerror("Not Found", f"Customer '{customer_name}' does not exist in the database.")
-        conn.close()
-        search_window.destroy()
+            messagebox.showerror("Error", "All fields are required!")
 
-    search_window = tk.Toplevel()
-    search_window.title("Search Customer")
+    add_customer_window = Toplevel(main_window)
+    add_customer_window.title("Add New Customer")
 
-    ttk.Label(search_window, text="Customer Name:").grid(row=0, column=0, padx=5, pady=5)
-    entry_search = ttk.Entry(search_window)
-    entry_search.grid(row=0, column=1, padx=5, pady=5)
+    Label(add_customer_window, text="Customer Name").grid(row=0, column=0)
+    name_entry = Entry(add_customer_window)
+    name_entry.grid(row=0, column=1)
 
-    btn_find_customer = ttk.Button(search_window, text="Search", command=find_customer)
-    btn_find_customer.grid(row=1, column=0, columnspan=2, padx=5, pady=10)
+    Label(add_customer_window, text="BF").grid(row=1, column=0)
+    bf_entry = Entry(add_customer_window)
+    bf_entry.grid(row=1, column=1)
 
-# Function to open customer log window
-def open_customer_log():
-    init_customer_db()
+    Label(add_customer_window, text="Size").grid(row=2, column=0)
+    size_entry = Entry(add_customer_window)
+    size_entry.grid(row=2, column=1)
 
-    customer_log_window = tk.Toplevel()
-    customer_log_window.title("Customer Log")
+    Label(add_customer_window, text="GSM").grid(row=3, column=0)
+    gsm_entry = Entry(add_customer_window)
+    gsm_entry.grid(row=3, column=1)
 
-    btn_new_customer = ttk.Button(customer_log_window, text="New Customer", command=add_new_customer)
-    btn_new_customer.grid(row=0, column=0, padx=10, pady=10)
+    Label(add_customer_window, text="Type (s/r)").grid(row=4, column=0)
+    type_var = StringVar(add_customer_window)
+    type_var.set("s")
+    OptionMenu(add_customer_window, type_var, "s", "r").grid(row=4, column=1)
 
-    btn_old_customer = ttk.Button(customer_log_window, text="Old Customer", command=search_customer)
-    btn_old_customer.grid(row=0, column=1, padx=10, pady=10)
+    Label(add_customer_window, text="Quantity").grid(row=5, column=0)
+    qty_entry = Entry(add_customer_window)
+    qty_entry.grid(row=5, column=1)
 
-if __name__ == "__main__":
-    root = tk.Tk()
-    root.withdraw()  # Hide the root window
-    open_customer_log()
-    root.mainloop()
+    Label(add_customer_window, text="Current Date").grid(row=6, column=0)
+    currDate_entry = Entry(add_customer_window)
+    currDate_entry.grid(row=6, column=1)
+
+    Button(add_customer_window, text="Save", command=save_customer).grid(row=7, column=0, columnspan=2)
+
+# Function to view a customer's order details
+def view_customer():
+    def fetch_customer_orders():
+        name = name_entry.get()
+        if name:
+            c.execute("SELECT id FROM customers WHERE name=?", (name,))
+            customer = c.fetchone()
+            if customer:
+                customer_id = customer[0]
+                c.execute("SELECT * FROM order_details WHERE customerID=?", (customer_id,))
+                orders = c.fetchall()
+                order_text.delete("1.0", END)
+                for order in orders:
+                    order_text.insert(END, f"Order ID: {order[0]}, BF: {order[1]}, Size: {order[2]}, GSM: {order[3]}, Type: {order[4]}, Qty: {order[5]}, Date: {order[6]}\n")
+            else:
+                messagebox.showerror("Error", "Customer not found!")
+        else:
+            messagebox.showerror("Error", "Customer name is required!")
+
+    view_customer_window = Toplevel(main_window)
+    view_customer_window.title("View Customer Orders")
+
+    Label(view_customer_window, text="Customer Name").grid(row=0, column=0)
+    name_entry = Entry(view_customer_window)
+    name_entry.grid(row=0, column=1)
+
+    Button(view_customer_window, text="Fetch Orders", command=fetch_customer_orders).grid(row=1, column=0, columnspan=2)
+
+    order_text = Text(view_customer_window, width=50, height=10)
+    order_text.grid(row=2, column=0, columnspan=2)
+
+# Main window
+main_window = Tk()
+main_window.title("Order Management System")
+
+Button(main_window, text="Add New Customer", command=add_customer).grid(row=0, column=0, padx=20, pady=20)
+Button(main_window, text="View Customer Orders", command=view_customer).grid(row=0, column=1, padx=20, pady=20)
+
+main_window.mainloop()
+
+# Close the database connection when the GUI is closed
+conn.close()
