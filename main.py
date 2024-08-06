@@ -337,49 +337,86 @@ def open_csv_window():
     frame = ttk.Frame(csv_window)
     frame.pack(padx=20, pady=20, fill=tk.BOTH, expand=True)
 
-    canvas = tk.Canvas(frame)
-    scrollbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=canvas.yview)
-    canvas.configure(yscrollcommand=scrollbar.set)
+    # Create the Treeview widget
+    tree = ttk.Treeview(frame, columns=("ID", "Reel No.", "Size", "BF", "GSM", "Product Type", "Barcode"), show="headings")
+    tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
+    # Define the column headings
+    tree.heading("ID", text="ID")
+    tree.heading("Reel No.", text="Reel No.")
+    tree.heading("Size", text="Size")
+    tree.heading("BF", text="BF")
+    tree.heading("GSM", text="GSM")
+    tree.heading("Product Type", text="Product Type")
+    tree.heading("Barcode", text="Barcode")
+
+    # Define column widths
+    tree.column("ID", width=50)
+    tree.column("Reel No.", width=100)
+    tree.column("Size", width=100)
+    tree.column("BF", width=50)
+    tree.column("GSM", width=50)
+    tree.column("Product Type", width=100)
+    tree.column("Barcode", width=150)
+
+    # Add a vertical scrollbar
+    scrollbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=tree.yview)
+    tree.configure(yscrollcommand=scrollbar.set)
     scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-    canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-    listbox_frame = ttk.Frame(canvas)
-    canvas.create_window((0, 0), window=listbox_frame, anchor=tk.NW)
 
-    def on_delete_button_click(row_index):
+    # Function to delete the selected row
+    def delete_selected_row():
+        selected_item = tree.selection()[0]
+        row_index = tree.index(selected_item)
         delete_csv_row(row_index + 1)
-        update_listbox()
+        tree.delete(selected_item)
 
-    def update_listbox():
-        for widget in listbox_frame.winfo_children():
-            widget.destroy()  # Clear the old frame
+    # Add a delete button
+    delete_button = ttk.Button(csv_window, text="Delete Selected Row", command=delete_selected_row)
+    delete_button.pack(pady=10)
 
-        with open('products_export.csv', 'r') as csvfile:
-            reader = csv.reader(csvfile)
-            for row_index, row in enumerate(reader):
-                row_text = ', '.join(row)
-                row_label = ttk.Label(listbox_frame, text=row_text)
-                row_label.grid(row=row_index, column=0, sticky='w')
-
-                delete_button = ttk.Button(listbox_frame, text="Delete",
-                                           command=lambda i=row_index: on_delete_button_click(i))
-                delete_button.grid(row=row_index, column=1, sticky='e')
-
-        listbox_frame.update_idletasks()
-        canvas.config(scrollregion=canvas.bbox("all"))
-
-    update_listbox()
+    # Populate the Treeview with data from the CSV file
+    with open('products_export.csv', 'r') as csvfile:
+        reader = csv.reader(csvfile)
+        for row in reader:
+            tree.insert("", tk.END, values=row)
 
 
 # Function to toggle full screen
 def toggle_fullscreen(event=None):
     root.state('zoomed')
 
+def fetch_customer_names():
+    conn = sqlite3.connect('order_management.db')
+    cursor = conn.cursor()
+    cursor.execute('SELECT name FROM customers')
+    customer_names = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    return customer_names
+
+# Fetch customer names
+customer_names = fetch_customer_names()
+
+# Create a StringVar for the customer name
+
+# Function to update the dropdown list based on the current entry
+def update_customer_list(event):
+    typed = selected_customer.get()
+    if typed == '':
+        customer_dropdown['values'] = customer_names
+    else:
+        filtered_names = [name for name in customer_names if typed.lower() in name.lower()]
+        customer_dropdown['values'] = filtered_names
+
+
+
+
 
 # Main application window
 root = ThemedTk(theme="breeze")
 root.title("Product Management")
 root.geometry("800x500")
+selected_customer = tk.StringVar(root)
 
 # Create a scrollable frame
 main_frame = ttk.Frame(root)
@@ -406,6 +443,38 @@ scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 input_frame = ttk.Frame(scrollable_frame)
 input_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
 
+# Fetch customer names
+customer_names = fetch_customer_names()
+
+# Create a StringVar for the customer name
+selected_customer = tk.StringVar()
+
+# Create the dropdown beside the scan barcode button
+ttk.Label(scrollable_frame, text="Select Customer:").grid(row=5, column=3, padx=10, pady=10)
+customer_dropdown = ttk.Combobox(scrollable_frame, textvariable=selected_customer)
+customer_dropdown['values'] = customer_names
+customer_dropdown.grid(row=5, column=4, padx=10, pady=10)
+customer_dropdown.current(0)  # Set default value
+
+
+# Barcode scanning
+ttk.Label(scrollable_frame, text="Enter Barcode:").grid(row=5, column=0, padx=10, pady=10)
+barcode_entry = ttk.Entry(scrollable_frame)
+barcode_entry.grid(row=5, column=1, padx=10, pady=10)
+scan_button = ttk.Button(scrollable_frame, text="Scan Barcode", command=scan_barcode)
+scan_button.grid(row=5, column=2, padx=10, pady=10)
+
+# Fetch customer names
+customer_names = fetch_customer_names()
+
+# Create a StringVar for the customer name
+
+# Create the dropdown beside the scan barcode button
+ttk.Label(scrollable_frame, text="Select Customer:").grid(row=5, column=3, padx=10, pady=10)
+customer_dropdown = ttk.Combobox(scrollable_frame, textvariable=selected_customer)
+customer_dropdown['values'] = customer_names
+customer_dropdown.grid(row=5, column=4, padx=10, pady=10)
+customer_dropdown.bind('<KeyRelease>', update_customer_list)
 # Input fields
 # Input fields
 ttk.Label(input_frame, text="Size:").grid(row=0, column=0, padx=10, pady=10)
