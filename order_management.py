@@ -1,6 +1,7 @@
 import sqlite3
 from tkinter import *
 from tkinter import messagebox
+from datetime import datetime
 
 # Create and connect to the SQLite database
 conn = sqlite3.connect('order_management.db')
@@ -24,27 +25,44 @@ c.execute('''CREATE TABLE IF NOT EXISTS order_details (
 
 conn.commit()
 
-# Function to add a new customer and their order
-def add_customer():
-    def save_customer():
-        name = name_entry.get()
+def add_customer(main_window):
+    def add_order():
         bf = bf_entry.get()
         size = size_entry.get()
         gsm = gsm_entry.get()
         type_ = type_var.get()
         qty = qty_entry.get()
-        currDate = currDate_entry.get()
 
-        if name and bf and size and gsm and type_ and qty:
+        if bf and size and gsm and type_ and qty:
+            order_list.insert(END, (bf, size, gsm, type_, qty))
+            bf_entry.delete(0, END)
+            size_entry.delete(0, END)
+            gsm_entry.delete(0, END)
+            qty_entry.delete(0, END)
+        else:
+            messagebox.showerror("Error", "All fields are required!")
+
+    def save_customer():
+        name = name_entry.get()
+        if name and order_list.size() > 0:
             c.execute("INSERT INTO customers (name) VALUES (?)", (name,))
             customer_id = c.lastrowid
-            c.execute("INSERT INTO order_details (bf, size, gsm, type, qty, currDate, customerID) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                      (bf, size, gsm, type_, qty, currDate, customer_id))
+            currDate = datetime.now().strftime("%Y-%m-%d")
+            for order in order_list.get(0, END):
+                bf, size, gsm, type_, qty = order
+                c.execute("INSERT INTO order_details (bf, size, gsm, type, qty, currDate, customerID) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                          (bf, size, gsm, type_, qty, currDate, customer_id))
             conn.commit()
             messagebox.showinfo("Success", "Customer and order details added successfully!")
             add_customer_window.destroy()
         else:
-            messagebox.showerror("Error", "All fields are required!")
+            messagebox.showerror("Error", "Customer name and at least one order are required!")
+
+    def preview_orders():
+        preview_window = Toplevel(add_customer_window)
+        preview_window.title("Preview Orders")
+        for order in order_list.get(0, END):
+            Label(preview_window, text=f"BF: {order[0]}, Size: {order[1]}, GSM: {order[2]}, Type: {order[3]}, Qty: {order[4]}").pack()
 
     add_customer_window = Toplevel(main_window)
     add_customer_window.title("Add New Customer")
@@ -74,14 +92,15 @@ def add_customer():
     qty_entry = Entry(add_customer_window)
     qty_entry.grid(row=5, column=1)
 
-    Label(add_customer_window, text="Current Date").grid(row=6, column=0)
-    currDate_entry = Entry(add_customer_window)
-    currDate_entry.grid(row=6, column=1)
+    Button(add_customer_window, text="Add Order", command=add_order).grid(row=6, column=0, columnspan=2)
 
-    Button(add_customer_window, text="Save", command=save_customer).grid(row=7, column=0, columnspan=2)
+    order_list = Listbox(add_customer_window, width=50)
+    order_list.grid(row=7, column=0, columnspan=2)
 
-# Function to view a customer's order details
-def view_customer():
+    Button(add_customer_window, text="Preview Orders", command=preview_orders).grid(row=8, column=0, columnspan=2)
+    Button(add_customer_window, text="Save", command=save_customer).grid(row=9, column=0, columnspan=2)
+
+def view_customer(main_window):
     def fetch_customer_orders():
         name = name_entry.get()
         if name:
@@ -111,14 +130,17 @@ def view_customer():
     order_text = Text(view_customer_window, width=50, height=10)
     order_text.grid(row=2, column=0, columnspan=2)
 
-# Main window
-main_window = Tk()
-main_window.title("Order Management System")
-
-Button(main_window, text="Add New Customer", command=add_customer).grid(row=0, column=0, padx=20, pady=20)
-Button(main_window, text="View Customer Orders", command=view_customer).grid(row=0, column=1, padx=20, pady=20)
-
-main_window.mainloop()
-
 # Close the database connection when the GUI is closed
-conn.close()
+def on_closing():
+    conn.close()
+
+# Entry point to create the main window
+def main():
+    main_window = Tk()
+    main_window.title("Order Management System")
+
+    Button(main_window, text="Add New Customer", command=lambda: add_customer(main_window)).grid(row=0, column=0, padx=20, pady=20)
+    Button(main_window, text="View Customer Orders", command=lambda: view_customer(main_window)).grid(row=0, column=1, padx=20, pady=20)
+
+    main_window.protocol("WM_DELETE_WINDOW", on_closing)
+    main_window.mainloop()
