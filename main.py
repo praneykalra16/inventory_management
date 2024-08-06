@@ -34,7 +34,8 @@ def init_db():
             size TEXT,
             bf TEXT,
             gsm TEXT,
-            barcode str
+            product_type TEXT CHECK(product_type IN ('semi', 'royal')),
+            barcode TEXT
         )
     ''')
     conn.commit()
@@ -97,17 +98,18 @@ def save_product():
     size = entry_size.get()
     bf = entry_bf.get()
     gsm = entry_gsm.get()
+    product_type_value = product_type.get()
 
-    if not all([size, bf, gsm]):
+    if not all([size, bf, gsm, product_type_value]):
         messagebox.showerror("Error", "All fields are required!")
         return
 
     conn = sqlite3.connect('products.db')
     cursor = conn.cursor()
     cursor.execute('''
-        INSERT INTO products (reel_no, size, bf, gsm) 
-        VALUES (?, ?, ?, ?)
-    ''', (reel_no, size, bf, gsm))
+        INSERT INTO products (reel_no, size, bf, gsm, product_type) 
+        VALUES (?, ?, ?, ?, ?)
+    ''', (reel_no, size, bf, gsm, product_type_value))
     product_id = cursor.lastrowid
 
     # Generate barcode
@@ -129,7 +131,7 @@ def save_product():
     conn.close()
 
     # Display product features
-    features_text = f"Reel No.: {reel_no}\nSize: {size}\nBF: {bf}\nGSM: {gsm}"
+    features_text = f"Reel No.: {reel_no}\nSize: {size}\nGSM: {gsm}\nType: {product_type_value}"
     features_list.append(features_text)
 
     # Update the Text widget to show the new product label
@@ -141,8 +143,6 @@ def save_product():
 
     # Run new.py script
     run_new_script()
-
-
 
 def preview_print():
     global barcode_images, features_list  # Access the global lists
@@ -267,7 +267,7 @@ def scan_barcode():
 
         # Add product to the list for printing
         listbox_products.insert(tk.END,
-                                f"ID: {product[0]}, Reel No.: {product[1]}, Size: {product[2]}, BF: {product[3]}, GSM: {product[4]}")
+                                f"ID: {product[0]}, Reel No.: {product[1]}, Size: {product[2]}, BF: {product[3]}, GSM: {product[4]}, Type: {product[5]}")
 
         # Remove product from the database
         cursor.execute('DELETE FROM products WHERE barcode=?', (barcode_value,))
@@ -405,6 +405,7 @@ input_frame = ttk.Frame(scrollable_frame)
 input_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
 
 # Input fields
+# Input fields
 ttk.Label(input_frame, text="Size:").grid(row=0, column=0, padx=10, pady=10)
 entry_size = ttk.Entry(input_frame)
 entry_size.grid(row=0, column=1, padx=10, pady=10)
@@ -417,9 +418,17 @@ ttk.Label(input_frame, text="GSM:").grid(row=2, column=0, padx=10, pady=10)
 entry_gsm = ttk.Entry(input_frame)
 entry_gsm.grid(row=2, column=1, padx=10, pady=10)
 
+ttk.Label(input_frame, text="Product Type:").grid(row=3, column=0, padx=10, pady=10)
+product_type = tk.StringVar()
+dropdown_product_type = ttk.Combobox(input_frame, textvariable=product_type)
+dropdown_product_type['values'] = ('semi', 'royal')
+dropdown_product_type.grid(row=3, column=1, padx=10, pady=10)
+dropdown_product_type.current(0)  # Set default value
+
+
 # Save button
 save_button = ttk.Button(input_frame, text="Save Product", command=save_product)
-save_button.grid(row=3, column=0, columnspan=2, padx=10, pady=10)
+save_button.grid(row=4, column=0, columnspan=2, padx=10, pady=10)
 
 # Labels display
 labels_display = tk.Text(scrollable_frame, height=10, width=30, wrap=tk.WORD)
