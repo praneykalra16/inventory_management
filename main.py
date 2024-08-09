@@ -514,9 +514,7 @@ preview_button.grid(row=4, column=1, padx=10, pady=10)
 
 open_order_management_button = tk.Button(root, text="Open Order Management", command=open_order_management)
 open_order_management_button.pack(pady=20)
-# btn_customer_log = ttk.Button(scrollable_frame, text="Customer Log", command=open_customer_log)  # Add this button
-# btn_customer_log.grid(row=0, column=2, padx=5, pady=5)
-# Barcode scanning
+
 ttk.Label(scrollable_frame, text="Enter Barcode:").grid(row=5, column=0, padx=10, pady=10)
 barcode_entry = ttk.Entry(scrollable_frame)
 barcode_entry.grid(row=5, column=1, padx=10, pady=10)
