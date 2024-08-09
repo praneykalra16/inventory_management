@@ -3,6 +3,7 @@ from tkinter import ttk, messagebox
 import sqlite3
 import barcode
 from barcode.writer import ImageWriter
+from barcode.ean import EAN13
 from PIL import Image, ImageTk
 from io import BytesIO
 import csv
@@ -12,6 +13,7 @@ import os
 from PIL import ImageWin
 import win32print
 import win32ui
+
 # Global lists for barcode images and features
 barcode_images = []
 features_list = []
@@ -36,7 +38,7 @@ def init_db():
             size TEXT,
             bf TEXT,
             gsm TEXT,
-            product_type TEXT CHECK(product_type IN ('semi', 'royal')),
+            product_type TEXT CHECK(product_type IN ('semi', 'rg')),
             barcode TEXT
         )
     ''')
@@ -91,6 +93,7 @@ def generate_reel_no(last_id):
     return f'{reel_no}{last_id % 1000 + 1}'
 
 
+
 def save_product():
     global barcode_images, features_list
 
@@ -116,7 +119,7 @@ def save_product():
 
     # Generate barcode
     barcode_str = f'{product_id:012d}'
-    ean = barcode.get('ean13')(barcode_str, writer=ImageWriter())
+    ean = EAN13(barcode_str, writer=ImageWriter())  # Correct way to create the barcode
     full_barcode_str = ean.get_fullcode()
     buffer = BytesIO()
     ean.write(buffer)
@@ -454,7 +457,12 @@ ttk.Label(scrollable_frame, text="Select Customer:").grid(row=5, column=3, padx=
 customer_dropdown = ttk.Combobox(scrollable_frame, textvariable=selected_customer)
 customer_dropdown['values'] = customer_names
 customer_dropdown.grid(row=5, column=4, padx=10, pady=10)
-customer_dropdown.current(0)  # Set default value
+# Hypothetical function to get customers
+if not customer_names:
+    customer_names = ["No customers available"]
+customer_dropdown['values'] = customer_names
+customer_dropdown.current(0)
+ # Set default value
 
 
 # Barcode scanning
@@ -492,7 +500,7 @@ entry_gsm.grid(row=2, column=1, padx=10, pady=10)
 ttk.Label(input_frame, text="Product Type:").grid(row=3, column=0, padx=10, pady=10)
 product_type = tk.StringVar()
 dropdown_product_type = ttk.Combobox(input_frame, textvariable=product_type)
-dropdown_product_type['values'] = ('semi', 'royal')
+dropdown_product_type['values'] = ('semi', 'rg')
 dropdown_product_type.grid(row=3, column=1, padx=10, pady=10)
 dropdown_product_type.current(0)  # Set default value
 
