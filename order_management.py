@@ -62,11 +62,7 @@ def add_customer(main_window):
                 c.execute("INSERT INTO customers (name) VALUES (?)", (name,))
                 customer_id = c.lastrowid
 
-<<<<<<< HEAD
-=======
 
-            # Save orders
->>>>>>> dacb7b7243a57d3f127694adbbf6e888ad0a66eb
             currDate = datetime.now().strftime("%Y-%m-%d")
             for order in order_list.get(0, END):
                 bf, size, gsm, type_, qty = order
