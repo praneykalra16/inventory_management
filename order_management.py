@@ -332,12 +332,12 @@ def view_customer(main_window):
     view_customer_window.grid_columnconfigure(1, weight=1)
 
 
-# Close the database connection when the GUI is closed
-def on_closing():
-    if conn:
-        conn.close()
-        products_conn.close()
-    main_window.destroy()
+# # Close the database connection when the GUI is closed
+# def on_closing():
+#     if conn:
+#         conn.close()
+#         products_conn.close()
+#     main_window.destroy()
 
 # Entry point to create the main window
 def main():
@@ -347,5 +347,5 @@ def main():
     Button(main_window, text="Add New Customer/Order", command=lambda: add_customer(main_window)).grid(row=0, column=0, padx=20, pady=20)
     Button(main_window, text="View Customer Orders", command=lambda: view_customer(main_window)).grid(row=0, column=1, padx=20, pady=20)
     Button(main_window, text="View All Orders", command=lambda: view_all_orders(main_window)).grid(row=0, column=2, padx=20, pady=20)
-    main_window.protocol("WM_DELETE_WINDOW", on_closing)
+    # main_window.protocol("WM_DELETE_WINDOW", on_closing)
     main_window.mainloop()
