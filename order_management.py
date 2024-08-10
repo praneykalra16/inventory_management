@@ -3,7 +3,6 @@ from tkinter import *
 from tkinter import ttk,simpledialog
 from tkinter import messagebox
 from datetime import datetime
-
 # Create and connect to the SQLite database
 conn = sqlite3.connect('order_management.db')
 c = conn.cursor()
@@ -64,6 +63,7 @@ def add_customer(main_window):
                 # Insert new customer
                 c.execute("INSERT INTO customers (name) VALUES (?)", (name,))
                 customer_id = c.lastrowid
+
 
             # Save orders
             currDate = datetime.now().strftime("%Y-%m-%d")
