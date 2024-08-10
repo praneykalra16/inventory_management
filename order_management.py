@@ -54,18 +54,15 @@ def add_customer(main_window):
     def save_customer():
         name = selected_customer.get()
         if name and order_list.size() > 0:
-            # Check if customer already exists
             c.execute("SELECT id FROM customers WHERE name=?", (name,))
             customer = c.fetchone()
 
             if customer:
                 customer_id = customer[0]
             else:
-                # Insert new customer
                 c.execute("INSERT INTO customers (name) VALUES (?)", (name,))
                 customer_id = c.lastrowid
 
-            # Save orders
             currDate = datetime.now().strftime("%Y-%m-%d")
             for order in order_list.get(0, END):
                 bf, size, gsm, type_, qty = order
@@ -93,46 +90,42 @@ def add_customer(main_window):
             filtered_names = [name for name in customer_names if typed.lower() in name.lower()]
             customer_dropdown['values'] = filtered_names
             if filtered_names:
-                customer_dropdown.event_generate('<Down>')  # Opens the dropdown menu
+                customer_dropdown.event_generate('<Down>')
 
     def add_new_customer():
         new_name = simpledialog.askstring("Add New Customer", "Enter new customer name:")
         if new_name:
-            # Check if the name already exists
             if new_name not in customer_names:
-                # Insert new customer
                 c.execute("INSERT INTO customers (name) VALUES (?)", (new_name,))
                 conn.commit()
-                # Update customer names list
                 customer_names.append(new_name)
                 customer_dropdown['values'] = customer_names
-                selected_customer.set(new_name)  # Set the new name as the selected customer
+                selected_customer.set(new_name)
 
-    # Fetch customer names
+    def on_customer_selected(event):
+        # This ensures that the StringVar is updated when a selection is made from the dropdown
+        selected_customer.set(customer_dropdown.get())
+
     customer_names = fetch_customer_names()
 
-    # Create the add_customer window
     add_customer_window = Toplevel(main_window)
     add_customer_window.title("Add New Customer")
 
     Label(add_customer_window, text="Customer Name").grid(row=0, column=0)
 
-    # Create a StringVar to store the selected customer name
     selected_customer = StringVar()
 
-    # Create a Combobox for customer name selection
     customer_dropdown = ttk.Combobox(add_customer_window, textvariable=selected_customer)
     customer_dropdown['values'] = customer_names
     customer_dropdown.grid(row=0, column=1, padx=(0, 10))
 
-    # Add a button to add a new customer
+    # Bind the selection event to update the StringVar
+    customer_dropdown.bind("<<ComboboxSelected>>", on_customer_selected)
+
     add_customer_button = Button(add_customer_window, text="Add New Customer", command=add_new_customer)
     add_customer_button.grid(row=0, column=2)
 
-    # Bind the key release event to update the dropdown list as the user types
     customer_dropdown.bind('<KeyRelease>', update_customer_list)
-
-    # Set focus on the combobox to start typing immediately
     customer_dropdown.focus()
 
     Label(add_customer_window, text="BF").grid(row=1, column=0)
