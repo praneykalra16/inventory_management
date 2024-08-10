@@ -26,6 +26,23 @@ def open_order_management():
 def run_new_script():
     subprocess.run(["python", "new.py"], check=True)
 
+def refreshcus(event=None):
+    customer_names = fetch_customer_names()
+    # Update the dropdown menu with the new customer names
+    customer_dropdown['values'] = customer_names
+    # Optionally, you can also set the current value to the first customer or clear it
+    if customer_names:
+        customer_dropdown.current(0)  # Set the first item as the default
+    else:
+        customer_dropdown.set('')  # Clear the selection if no customers are availabl
+
+def refresh_customer_dropdown():
+    customer_names = fetch_customer_names()
+    if customer_names:
+        customer_dropdown['values'] = customer_names
+        customer_dropdown.current(0)  # Optionally, set the first item as default
+    else:
+        customer_dropdown.set('')  # Clear the selection if no customers are available
 
 # Database setup
 def init_db():
@@ -406,9 +423,9 @@ customer_names = fetch_customer_names()
 def update_customer_list(event):
     typed = selected_customer.get()
     if typed == '':
-        customer_dropdown['values'] = customer_names
+        customer_dropdown['values'] = fetch_customer_names()
     else:
-        filtered_names = [name for name in customer_names if typed.lower() in name.lower()]
+        filtered_names = [name for name in fetch_customer_names() if typed.lower() in name.lower()]
         customer_dropdown['values'] = filtered_names
 
 
@@ -450,13 +467,19 @@ input_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
 customer_names = fetch_customer_names()
 
 # Create a StringVar for the customer name
+
+# Create the dropdown beside the scan barcode button
 selected_customer = tk.StringVar()
 
 # Create the dropdown beside the scan barcode button
 ttk.Label(scrollable_frame, text="Select Customer:").grid(row=5, column=3, padx=10, pady=10)
 customer_dropdown = ttk.Combobox(scrollable_frame, textvariable=selected_customer)
-customer_dropdown['values'] = customer_names
+customer_dropdown['values'] = fetch_customer_names()
 customer_dropdown.grid(row=5, column=4, padx=10, pady=10)
+
+# Add a refresh button beside the dropdown
+refresh_button = ttk.Button(scrollable_frame, text="Refresh", command=refresh_customer_dropdown)
+refresh_button.grid(row=5, column=5, padx=10, pady=10)
 # Hypothetical function to get customers
 if not customer_names:
     customer_names = ["No customers available"]
