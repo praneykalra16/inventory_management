@@ -10,9 +10,10 @@ import csv
 from ttkthemes import ThemedTk
 import subprocess
 import os
-from PIL import ImageWin
 import win32print
 import win32ui
+from PIL import Image, ImageDraw, ImageFont, ImageWin
+
 
 barcode_images = []
 features_list = []
@@ -339,10 +340,151 @@ def print_scanned_list():
         messagebox.showinfo("Information", "No items to print.")
         return
 
-    # Replace with actual printing logic for the list
-    print("Printing scanned list...")
+    # Get the selected customer name
+    customer_name = selected_customer.get()
+    if not customer_name:
+        messagebox.showerror("Error", "Please select a customer!")
+        return
+
+    # Create an image for the printout
+    canvas_width = 595  # Width in points for A4
+    canvas_height = 842  # Height in points for A4
+    img = Image.new("RGB", (canvas_width, canvas_height), "white")
+    draw = ImageDraw.Draw(img)
+    font = ImageFont.truetype(
+        "arial.ttf", 16
+    )  # Increase font size for better visibility
+
+    # Add customer name at the top
+    draw.text(
+        (canvas_width / 2 - 150, 30),
+        f"Customer: {customer_name}",
+        font=font,
+        fill="black",
+    )  # Adjusted text position
+
+    # Define table parameters
+    x_start = 20
+    y_start = 100
+    row_height = 40  # Adjusted row height for better spacing
+    column_widths = [
+        70,
+        100,
+        100,
+        70,
+        70,
+        160,
+    ]  # Adjusted column widths to fit page width
+    headers = ["ID", "Size", "GSM", "BF", "Print", "Product Type"]
+
+    # Draw table headers
+    x = x_start
+    y = y_start
+    for i, header in enumerate(headers):
+        draw.text(
+            (x + column_widths[i] / 2 - 10, y + row_height / 4 - 10),
+            header,
+            font=font,
+            fill="black",
+        )
+        x += column_widths[i]
+
+    # Draw horizontal line below headers
+    y += row_height
+    draw.line([(x_start, y), (x_start + sum(column_widths), y)], fill="black")
+
+    # Draw vertical lines for table columns
+    x = x_start
+    for i in range(len(headers) + 1):
+        draw.line([(x, y_start), (x, y + len(items) * row_height)], fill="black")
+        x += column_widths[i] if i < len(headers) else 0
+
+    # Draw horizontal lines for table rows
+    draw.line(
+        [
+            (x_start, y_start - row_height),
+            (x_start + sum(column_widths), y_start - row_height),
+        ],
+        fill="black",
+    )
+    draw.line(
+        [
+            (x_start, y + len(items) * row_height),
+            (x_start + sum(column_widths), y + len(items) * row_height),
+        ],
+        fill="black",
+    )
+
+    # Draw table content
+    y = y_start + row_height
     for item in items:
-        print(item)
+        fields = item.split(", ")
+        if len(fields) >= 4:
+            fields = [
+                fields[0],
+                fields[2],
+                fields[4],
+                "",
+                "",
+                fields[5],
+            ]  # Added empty fields for BF and Print
+        x = x_start
+        for i, field in enumerate(fields):
+            draw.text(
+                (x + column_widths[i] / 2 - 10, y + row_height / 2 - 10),
+                field,
+                font=font,
+                fill="black",
+            )
+            x += column_widths[i]
+        y += row_height
+
+    # Save the image as a temporary file
+    temp_file_path = "scanned_list_preview.png"
+    img.save(temp_file_path)
+
+    # Print the image
+    print("Printing scanned list...")
+
+    # Open the printer
+    printer_name = win32print.GetDefaultPrinter()
+    hprinter = win32print.OpenPrinter(printer_name)
+
+    try:
+        # Start a print job
+        hdc = win32ui.CreateDC()
+        hdc.CreatePrinterDC(printer_name)
+        hdc.StartDoc("Scanned List Print")
+        hdc.StartPage()
+
+        # Set up the print area and dimensions for A4 paper
+        a4_width = 2100  # A4 width in tenths of a millimeter (210 mm)
+        a4_height = 2970  # A4 height in tenths of a millimeter (297 mm)
+        margins = 100  # Margins in tenths of a millimeter (10 mm)
+
+        # Open the image and prepare for printing
+        img_pil = Image.open(temp_file_path)
+        img_width, img_height = img_pil.size
+        scale_x = a4_width / img_width
+        scale_y = a4_height / img_height
+        scale = min(scale_x, scale_y)
+
+        img_width_scaled = int(img_width * scale)
+        img_height_scaled = int(img_height * scale)
+
+        img_x = (a4_width - img_width_scaled) // 2
+        img_y = (a4_height - img_height_scaled) // 2
+        img_rect = (img_x, img_y, img_x + img_width_scaled, img_y + img_height_scaled)
+        bmp = ImageWin.Dib(img_pil.resize((img_width_scaled, img_height_scaled)))
+        bmp.draw(hdc.GetHandleOutput(), img_rect)
+
+        # End the page and document
+        hdc.EndPage()
+        hdc.EndDoc()
+
+    finally:
+        # Close the printer handle
+        win32print.ClosePrinter(hprinter)
 
     # Optionally, clear the listbox after printing
     listbox_products.delete(0, tk.END)
@@ -439,6 +581,125 @@ def toggle_fullscreen(event=None):
     root.state("zoomed")
 
 
+def print_preview_scanned_list():
+    # Get the selected customer name
+    customer_name = selected_customer.get()
+    if not customer_name:
+        messagebox.showerror("Error", "Please select a customer!")
+        return
+
+    # Get all items from listbox_products
+    items = listbox_products.get(0, tk.END)
+    if not items:
+        messagebox.showinfo("Information", "No items to preview.")
+        return
+
+    # Create a new window for the print preview
+    preview_window = tk.Toplevel(root)
+    preview_window.title("Print Preview")
+
+    # Create a Canvas widget
+    canvas_width = 595  # Width in points for A4
+    canvas_height = 842  # Height in points for A4
+    canvas = tk.Canvas(preview_window, width=canvas_width, height=canvas_height)
+    canvas.pack()
+
+    # Add customer name at the top
+    canvas.create_text(
+        canvas_width / 2,
+        30,
+        text=f"Customer: {customer_name}",
+        font=("Helvetica", 16, "bold"),
+        anchor=tk.N,
+    )
+
+    # Define table parameters
+    x_start = 30
+    y_start = 80
+    row_height = 50  # Increased row height for spacing
+    column_widths = [80, 100, 80, 80, 80, 80]  # Decreased column widths
+    headers = ["ID", "Size", "GSM", "BF", "Rate", "Type"]
+
+    # Draw table headers
+    x = x_start
+    y = y_start
+    canvas.create_line(
+        x_start, y_start, x_start + sum(column_widths), y_start, fill="black"
+    )
+    for i, header in enumerate(headers):
+        canvas.create_text(
+            x + column_widths[i] / 2,
+            y + row_height / 4,
+            text=header,
+            font=("Helvetica", 12, "bold"),
+            anchor=tk.N,
+        )
+        x += column_widths[i]
+
+    # Draw horizontal line below headers
+    y += row_height
+    canvas.create_line(x_start, y, x_start + sum(column_widths), y, fill="black")
+
+    # Draw vertical lines for table columns
+    x = x_start
+    for i in range(len(headers) + 1):
+        canvas.create_line(x, y_start, x, y + len(items) * row_height, fill="black")
+        x += column_widths[i] if i < len(headers) else 0
+
+    # Draw horizontal lines for table rows
+    canvas.create_line(
+        x_start,
+        y_start - row_height,
+        x_start + sum(column_widths),
+        y_start - row_height,
+        fill="black",
+    )
+    canvas.create_line(
+        x_start,
+        y + len(items) * row_height,
+        x_start + sum(column_widths),
+        y + len(items) * row_height,
+        fill="black",
+    )
+
+    # Draw table content
+    y = y_start + row_height
+    for item in items:
+        fields = item.split(", ")
+        # Ensure fields align with the updated headers
+        if len(fields) >= 4:
+            fields = [
+                fields[0],
+                fields[2],
+                fields[4],
+                "",
+                "",
+                fields[5],
+            ]  # Added empty fields for BF and Print
+        x = x_start
+        for i, field in enumerate(fields):
+            canvas.create_text(
+                x + column_widths[i] / 2,
+                y + row_height / 2,
+                text=field,
+                font=("Helvetica", 12),
+                anchor=tk.N,
+            )
+            x += column_widths[i]
+        y += row_height
+
+    # Show the preview window
+    preview_window.mainloop()
+
+
+def print_preview(preview_window):
+    # Example function to handle printing
+    # You can use libraries like `reportlab` or `Pillow` to handle print functionality
+    # Placeholder for printing logic
+    print("Printing the preview...")
+    preview_window.destroy()
+
+
 def fetch_customer_names():
     conn = sqlite3.connect("order_management.db")
     cursor = conn.cursor()
@@ -501,6 +762,15 @@ ttk.Label(scrollable_frame, text="Select Customer:").grid(
 customer_dropdown = ttk.Combobox(scrollable_frame, textvariable=selected_customer)
 customer_dropdown["values"] = fetch_customer_names()
 customer_dropdown.grid(row=5, column=4, padx=10, pady=10)
+
+# Preview scanned list button
+print_preview_scanned_list_button = ttk.Button(
+    scrollable_frame,
+    text="Print Preview Scanned List",
+    command=print_preview_scanned_list,
+)
+print_preview_scanned_list_button.grid(row=9, column=0, columnspan=3, padx=10, pady=10)
+
 
 # Add a refresh button beside the dropdown
 refresh_button = ttk.Button(
@@ -601,6 +871,6 @@ print_list_button.grid(row=7, column=0, columnspan=3, padx=10, pady=10)
 
 # Open CSV data window button
 csv_button = ttk.Button(scrollable_frame, text="Open CSV Data", command=open_csv_window)
-csv_button.grid(row=8, column=0, columnspan=3, padx=10, pady=10)
+csv_button.grid(row=10, column=0, columnspan=3, padx=10, pady=10)
 root.bind("<F11>", toggle_fullscreen)
 root.mainloop()
