@@ -340,12 +340,10 @@ def delete_selected_row_scanlist():
     for item in selected_item_scan:
         treeview_products.delete(item)
 
-    messagebox.showinfo("Success", "Selected row(s) deleted from the list!")
-
 # Function to print scanned list
 def print_scanned_list():
-    # Get all items from listbox_products
-    items = treeview_products.get(0, tk.END)
+    # Get all items from treeview_products
+    items = treeview_products.get_children()
     if not items:
         messagebox.showinfo("Information", "No items to print.")
         return
@@ -361,9 +359,7 @@ def print_scanned_list():
     canvas_height = 842  # Height in points for A4
     img = Image.new("RGB", (canvas_width, canvas_height), "white")
     draw = ImageDraw.Draw(img)
-    font = ImageFont.truetype(
-        "arial.ttf", 16
-    )  # Increase font size for better visibility
+    font = ImageFont.truetype("arial.ttf", 16)  # Increase font size for better visibility
 
     # Add customer name at the top
     draw.text(
@@ -371,7 +367,7 @@ def print_scanned_list():
         f"Customer: {customer_name}",
         font=font,
         fill="black",
-    )  # Adjusted text position
+    )
 
     # Define table parameters
     x_start = 20
@@ -411,33 +407,19 @@ def print_scanned_list():
 
     # Draw horizontal lines for table rows
     draw.line(
-        [
-            (x_start, y_start - row_height),
-            (x_start + sum(column_widths), y_start - row_height),
-        ],
+        [(x_start, y_start - row_height), (x_start + sum(column_widths), y_start - row_height)],
         fill="black",
     )
     draw.line(
-        [
-            (x_start, y + len(items) * row_height),
-            (x_start + sum(column_widths), y + len(items) * row_height),
-        ],
+        [(x_start, y + len(items) * row_height), (x_start + sum(column_widths), y + len(items) * row_height)],
         fill="black",
     )
 
     # Draw table content
     y = y_start + row_height
     for item in items:
-        fields = item.split(", ")
-        if len(fields) >= 4:
-            fields = [
-                fields[0],
-                fields[2],
-                fields[4],
-                "",
-                "",
-                fields[5],
-            ]  # Added empty fields for BF and Print
+        # Retrieve the item values from Treeview
+        fields = treeview_products.item(item, 'values')
         x = x_start
         for i, field in enumerate(fields):
             draw.text(
@@ -496,37 +478,48 @@ def print_scanned_list():
         # Close the printer handle
         win32print.ClosePrinter(hprinter)
 
-    # Optionally, clear the listbox after printing
-    treeview_products.delete(0, tk.END)
+    delete_rows_from_products_table()
+
+    # Optionally, clear the Treeview after printing
+    for item in items:
+        treeview_products.delete(item)
 
 
-# Function to delete a row from the CSV file and database
 def delete_csv_row(row_index):
     temp_file = "temp_products_export.csv"
     product_id = None
 
-    with open("products_export.csv", "r") as csvfile, open(
-        temp_file, "w", newline=""
-    ) as temp_csvfile:
-        reader = csv.reader(csvfile)
-        writer = csv.writer(temp_csvfile)
+    try:
+        with open("products_export.csv", "r") as csvfile, open(temp_file, "w", newline="") as temp_csvfile:
+            reader = csv.reader(csvfile)
+            writer = csv.writer(temp_csvfile)
 
-        for i, row in enumerate(reader):
-            if i == row_index:
-                product_id = row[0]  # Assuming the first column is the product ID
-            else:
-                writer.writerow(row)
+            for i, row in enumerate(reader):
+                if i == row_index:
+                    product_id = row[0]  # Assuming the first column is the product ID
+                    print(f"Found product ID {product_id} for row index {row_index}.")
+                else:
+                    writer.writerow(row)
 
-    os.replace(temp_file, "products_export.csv")
+        if product_id:
+            # Replace the original CSV with the updated temp file
+            os.replace(temp_file, "products_export.csv")
+            print(f"Replaced the original CSV with the temp file.")
 
-    if product_id:
-        conn = sqlite3.connect("products.db")
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM products WHERE id=?", (product_id,))
-        conn.commit()
-        conn.close()
+            # Delete from database
+            conn = sqlite3.connect("products.db")
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM products WHERE id=?", (product_id,))
+            conn.commit()
+            conn.close()
+            print(f"Deleted product with ID {product_id} from the database.")
+        else:
+            print("No product ID found for deletion in the specified row.")
 
-# Function to open a new window with CSV data
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+
 def open_csv_window():
     csv_window = tk.Toplevel(root)
     csv_window.title("CSV Data")
@@ -537,7 +530,7 @@ def open_csv_window():
     # Create the Treeview widget
     tree = ttk.Treeview(
         frame,
-        columns=("ID", "Reel No.", "Size", "BF", "GSM", "Product Type", "Barcode"),
+        columns=("S.No.", "Reel No.", "Size", "BF", "GSM", "Product Type", "Barcode"),
         show="headings",
     )
     tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -567,10 +560,14 @@ def open_csv_window():
 
     # Function to delete the selected row
     def delete_selected_row():
-        selected_item = tree.selection()[0]
-        row_index = tree.index(selected_item)
-        delete_csv_row(row_index + 1)
-        tree.delete(selected_item)
+        try:
+            selected_item = tree.selection()[0]
+            row_index = tree.index(selected_item)
+            print(f"Selected row index: {row_index}")
+            delete_csv_row(row_index )  # +1 assuming CSV rows start from 1
+            tree.delete(selected_item)
+        except Exception as e:
+            print(f"An error occurred while deleting row: {e}")
 
     # Add a delete button
     delete_button = ttk.Button(
@@ -579,16 +576,17 @@ def open_csv_window():
     delete_button.pack(pady=10)
 
     # Populate the Treeview with data from the CSV file
-    with open("products_export.csv", "r") as csvfile:
-        reader = csv.reader(csvfile)
-        for row in reader:
-            tree.insert("", tk.END, values=row)
+    try:
+        with open("products_export.csv", "r") as csvfile:
+            reader = csv.reader(csvfile)
+            for row in reader:
+                tree.insert("", tk.END, values=row)
+    except Exception as e:
+        print(f"An error occurred while reading the CSV file: {e}")
 
 
-# Function to toggle full screen
 def toggle_fullscreen(event=None):
     root.state("zoomed")
-
 
 def print_preview_scanned_list():
     # Get the selected customer name
@@ -730,6 +728,98 @@ def update_customer_list(event):
         customer_dropdown["values"] = filtered_names
 
 
+def update_dispatched_qty():
+    # Get selected customer name
+    customer_name = selected_customer.get()
+    if not customer_name:
+        messagebox.showerror("Error", "Please select a customer!")
+        return
+
+    conn_orders = sqlite3.connect("order_management.db")
+    cursor_orders = conn_orders.cursor()
+
+    # Check if customer exists in the database
+    cursor_orders.execute("SELECT id FROM customers WHERE name=?", (customer_name,))
+    customer = cursor_orders.fetchone()
+    if not customer:
+        messagebox.showerror("Error", "Customer not found!")
+        conn_orders.close()
+        return
+
+    customer_id = customer[0]
+
+    # Check if the customer has any orders
+    cursor_orders.execute("SELECT * FROM order_details WHERE customerID=?", (customer_id,))
+    orders = cursor_orders.fetchall()
+    if not orders:
+        messagebox.showinfo("No Order Found", f"No orders found for customer {customer_name}.")
+        conn_orders.close()
+        return
+
+    # Get all items from the Treeview
+    items = treeview_products.get_children()
+    if not items:
+        messagebox.showinfo("Information", "No items in the list to process.")
+        conn_orders.close()
+        return
+
+    conn_products = sqlite3.connect("products.db")
+    cursor_products = conn_products.cursor()
+
+    wrong_reel_scanned = False
+
+    for item in items:
+        product_data = treeview_products.item(item, "values")
+        product_type, size, gsm = product_data[5], product_data[2], product_data[4]
+
+        # Check if there's a matching order for the item
+        cursor_orders.execute(
+            """
+            SELECT qty, dispatched_qty 
+            FROM order_details 
+            WHERE customerID=? AND size=? AND gsm=? AND type=? 
+            """,
+            (customer_id, size, gsm, product_type)
+        )
+        order = cursor_orders.fetchone()
+
+        if order:
+            new_dispatched_qty = order[1] + 1  # Add 1 to the dispatched quantity
+            cursor_orders.execute(
+                """
+                UPDATE order_details
+                SET dispatched_qty=?
+                WHERE customerID=? AND size=? AND gsm=? AND type=?
+                """,
+                (new_dispatched_qty, customer_id, size, gsm, product_type)
+            )
+        else:
+            wrong_reel_scanned = True
+
+    if wrong_reel_scanned:
+        messagebox.showerror("Error", "Wrong reel scanned. Some items do not match with the orders.")
+    else:
+        messagebox.showinfo("Success", "Dispatched quantities updated successfully.")
+
+    conn_orders.commit()
+    conn_orders.close()
+    conn_products.close()
+
+
+def delete_rows_from_products_table():
+    # Connect to the products database
+    conn = sqlite3.connect("products.db")
+    cursor = conn.cursor()
+
+    # Delete each product in the Treeview from the products table
+    for item in treeview_products.get_children():
+        product = treeview_products.item(item, 'values')
+        product_id = product[0]  # Assuming the ID is the first column in the Treeview
+        cursor.execute("DELETE FROM products WHERE id=?", (product_id,))
+
+    conn.commit()
+    conn.close()
+
 # Main application window
 root = ThemedTk(theme="breeze")
 root.title("Product Management")
@@ -866,6 +956,9 @@ print_list_button = ttk.Button(
     scrollable_frame, text="Print Scanned List", command=print_scanned_list
 )
 print_list_button.grid(row=7, column=0, columnspan=3, padx=10, pady=10)
+
+update_button = tk.Button(scrollable_frame, text="Update Dispatched Quantity", command=update_dispatched_qty)
+update_button.grid(row=9, column=2, columnspan=3, padx=10, pady=10)
 
 # Open CSV data window button
 csv_button = ttk.Button(scrollable_frame, text="Open CSV Data", command=open_csv_window)

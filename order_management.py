@@ -3,7 +3,7 @@ from tkinter import *
 from tkinter import ttk, simpledialog
 from tkinter import messagebox
 from datetime import datetime
-
+from tkinter import Toplevel, BOTH, LEFT, RIGHT, Y, Button
 # Create and connect to the SQLite database
 conn = sqlite3.connect("order_management.db")
 c = conn.cursor()
@@ -35,7 +35,6 @@ c.execute(
 )
 
 conn.commit()
-
 
 def fetch_customer_names():
     c.execute("SELECT name FROM customers")
@@ -189,6 +188,55 @@ def add_customer(main_window):
 
 
 def view_all_orders(main_window):
+    def refresh_treeview():
+        # Clear existing items in the Treeview
+        for item in tree.get_children():
+            tree.delete(item)
+
+        # Fetch and display the orders again
+        c.execute(
+            """
+            SELECT order_details.id, customers.name, order_details.bf, 
+                   order_details.size, order_details.gsm, order_details.type, 
+                   order_details.qty, order_details.dispatched_qty, order_details.currDate
+            FROM order_details 
+            JOIN customers ON order_details.customerID = customers.id
+            """
+        )
+        orders = c.fetchall()
+
+        for order in orders:
+            order_id, customer_name, bf, size, gsm, type_, qty, dispatched_qty, currDate = (
+                order
+            )
+
+            # Check if the product is in stock
+            pc.execute(
+                "SELECT COUNT(*) FROM products WHERE product_type=? AND size=? AND gsm=?",
+                (type_, size, gsm),
+            )
+            in_stock = pc.fetchone()[0]
+            status = "In Stock" if in_stock > 0 else "To Be Made"
+
+            # Insert the order into the Treeview
+            tree.insert(
+                "",
+                "end",
+                values=(
+                    order_id,
+                    customer_name,
+                    bf,
+                    size,
+                    gsm,
+                    type_,
+                    qty,
+                    dispatched_qty,  # New value for dispatched quantity
+                    currDate,
+                    status,
+                ),
+            )
+
+    # Create the window
     view_all_orders_window = Toplevel(main_window)
     view_all_orders_window.title("View All Orders")
 
@@ -206,7 +254,7 @@ def view_all_orders(main_window):
             "GSM",
             "Type",
             "Qty",
-            "Dispatched Qty",  # New column for dispatched quantity
+            "Dispatched Qty",
             "Date",
             "Status",
         ),
@@ -222,7 +270,7 @@ def view_all_orders(main_window):
     tree.heading("GSM", text="GSM")
     tree.heading("Type", text="Type")
     tree.heading("Qty", text="Qty")
-    tree.heading("Dispatched Qty", text="Dispatched Qty")  # New column heading
+    tree.heading("Dispatched Qty", text="Dispatched Qty")
     tree.heading("Date", text="Date")
     tree.heading("Status", text="Status")
 
@@ -234,7 +282,7 @@ def view_all_orders(main_window):
     tree.column("GSM", width=50)
     tree.column("Type", width=70)
     tree.column("Qty", width=50)
-    tree.column("Dispatched Qty", width=100)  # New column width
+    tree.column("Dispatched Qty", width=100)
     tree.column("Date", width=100)
     tree.column("Status", width=100)
 
@@ -243,48 +291,8 @@ def view_all_orders(main_window):
     tree.configure(yscrollcommand=scrollbar.set)
     scrollbar.pack(side=RIGHT, fill=Y)
 
-    # Fetch and display the orders
-    c.execute(
-        """
-        SELECT order_details.id, customers.name, order_details.bf, 
-               order_details.size, order_details.gsm, order_details.type, 
-               order_details.qty, order_details.dispatched_qty, order_details.currDate
-        FROM order_details 
-        JOIN customers ON order_details.customerID = customers.id
-        """
-    )
-    orders = c.fetchall()
-
-    for order in orders:
-        order_id, customer_name, bf, size, gsm, type_, qty, dispatched_qty, currDate = (
-            order
-        )
-
-        # Check if the product is in stock (existing status logic)
-        pc.execute(
-            "SELECT COUNT(*) FROM products WHERE product_type=? AND size=? AND gsm=?",
-            (type_, size, gsm),
-        )
-        in_stock = pc.fetchone()[0]
-        status = "In Stock" if in_stock > 0 else "To Be Made"
-
-        # Insert the order into the Treeview
-        tree.insert(
-            "",
-            "end",
-            values=(
-                order_id,
-                customer_name,
-                bf,
-                size,
-                gsm,
-                type_,
-                qty,
-                dispatched_qty,  # New value for dispatched quantity
-                currDate,
-                status,
-            ),
-        )
+    # Initial data load
+    refresh_treeview()
 
     # Function to delete selected orders
     def delete_selected_orders():

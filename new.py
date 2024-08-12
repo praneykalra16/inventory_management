@@ -16,7 +16,7 @@ csv_file = 'products_export.csv'
 with open(csv_file, 'w', newline='') as file:
     csv_writer = csv.writer(file)
     # Write header row
-    csv_writer.writerow(['S.No', 'Reelno.', 'Size', 'BF', 'GSM','Type','Barcode No.'])
+    csv_writer.writerow(['S.No.', 'Reelno.', 'Size', 'BF', 'GSM','Type','Barcode No.'])
     # Write data rows
     csv_writer.writerows(rows)
 
