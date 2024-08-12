@@ -530,7 +530,7 @@ def open_csv_window():
     # Create the Treeview widget
     tree = ttk.Treeview(
         frame,
-        columns=("S.No.", "Reel No.", "Size", "BF", "GSM", "Product Type", "Barcode"),
+        columns=("ID", "Reel No.", "Size", "BF", "GSM", "Product Type", "Barcode"),
         show="headings",
     )
     tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
