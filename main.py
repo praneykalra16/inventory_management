@@ -15,41 +15,44 @@ import win32ui
 from PIL import Image, ImageDraw, ImageFont, ImageWin
 
 
-# Global lists for barcode images and features
 barcode_images = []
 features_list = []
 
 import order_management
 
+
 def open_order_management():
     order_management.main()
-# Run the new.py script
+
+
 def run_new_script():
     subprocess.run(["python", "new.py"], check=True)
 
+
 def refreshcus(event=None):
     customer_names = fetch_customer_names()
-    # Update the dropdown menu with the new customer names
-    customer_dropdown['values'] = customer_names
-    # Optionally, you can also set the current value to the first customer or clear it
+    customer_dropdown["values"] = customer_names
     if customer_names:
-        customer_dropdown.current(0)  # Set the first item as the default
+        customer_dropdown.current(0)
     else:
-        customer_dropdown.set('')  # Clear the selection if no customers are availabl
+        customer_dropdown.set("")
+
 
 def refresh_customer_dropdown():
     customer_names = fetch_customer_names()
     if customer_names:
-        customer_dropdown['values'] = customer_names
+        customer_dropdown["values"] = customer_names
         customer_dropdown.current(0)  # Optionally, set the first item as default
     else:
-        customer_dropdown.set('')  # Clear the selection if no customers are available
+        customer_dropdown.set("")  # Clear the selection if no customers are available
+
 
 # Database setup
 def init_db():
-    conn = sqlite3.connect('products.db')
+    conn = sqlite3.connect("products.db")
     cursor = conn.cursor()
-    cursor.execute('''
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS products (
             id INTEGER PRIMARY KEY,
             reel_no TEXT,
@@ -59,7 +62,8 @@ def init_db():
             product_type TEXT CHECK(product_type IN ('semi', 'rg')),
             barcode TEXT
         )
-    ''')
+    """
+    )
     conn.commit()
     conn.close()
 
@@ -71,9 +75,9 @@ run_new_script()
 
 # Function to save product and generate barcode
 def get_last_id():
-    conn = sqlite3.connect('products.db')
+    conn = sqlite3.connect("products.db")
     cursor = conn.cursor()
-    cursor.execute('SELECT MAX(id) FROM products')
+    cursor.execute("SELECT MAX(id) FROM products")
     last_id = cursor.fetchone()[0] or 0
     conn.close()
     return last_id
@@ -87,12 +91,12 @@ def generate_reel_no(last_id):
         """Increment a string in a way similar to incrementing numbers"""
         s = list(s)
         for i in reversed(range(len(s))):
-            if s[i] == 'z':
-                s[i] = 'a'
+            if s[i] == "z":
+                s[i] = "a"
             else:
                 s[i] = chr(ord(s[i]) + 1)
                 break
-        return ''.join(s)
+        return "".join(s)
 
     last_id = int(last_id) if last_id else 0
     base = 26 * 1000
@@ -102,14 +106,13 @@ def generate_reel_no(last_id):
         base *= 26
 
     reel_base = string.ascii_lowercase
-    reel_no = ''
+    reel_no = ""
     for _ in range(length):
         reel_no = increment_string(reel_no)
 
     # Ensure reel_no is not empty
-    reel_no = reel_no or 'a'
-    return f'{reel_no}{last_id % 1000 + 1}'
-
+    reel_no = reel_no or "a"
+    return f"{reel_no}{last_id % 1000 + 1}"
 
 
 def save_product():
@@ -127,16 +130,19 @@ def save_product():
         messagebox.showerror("Error", "All fields are required!")
         return
 
-    conn = sqlite3.connect('products.db')
+    conn = sqlite3.connect("products.db")
     cursor = conn.cursor()
-    cursor.execute('''
+    cursor.execute(
+        """
         INSERT INTO products (reel_no, size, bf, gsm, product_type) 
         VALUES (?, ?, ?, ?, ?)
-    ''', (reel_no, size, bf, gsm, product_type_value))
+    """,
+        (reel_no, size, bf, gsm, product_type_value),
+    )
     product_id = cursor.lastrowid
 
     # Generate barcode
-    barcode_str = f'{product_id:012d}'
+    barcode_str = f"{product_id:012d}"
     ean = EAN13(barcode_str, writer=ImageWriter())  # Correct way to create the barcode
     full_barcode_str = ean.get_fullcode()
     buffer = BytesIO()
@@ -147,14 +153,19 @@ def save_product():
     barcode_images.append(barcode_image)
 
     # Save the full barcode number (including check digit) in the database
-    cursor.execute('''
+    cursor.execute(
+        """
         UPDATE products SET barcode = ? WHERE id = ?
-    ''', (full_barcode_str, product_id))
+    """,
+        (full_barcode_str, product_id),
+    )
     conn.commit()
     conn.close()
 
     # Display product features
-    features_text = f"Reel No.: {reel_no}\nSize: {size}\nGSM: {gsm}\nType: {product_type_value}"
+    features_text = (
+        f"Reel No.: {reel_no}\nSize: {size}\nGSM: {gsm}\nType: {product_type_value}"
+    )
     features_list.append(features_text)
 
     # Update the Text widget to show the new product label
@@ -167,6 +178,7 @@ def save_product():
     # Run new.py script
     run_new_script()
 
+
 def preview_print():
     global barcode_images, features_list  # Access the global lists
 
@@ -178,16 +190,22 @@ def preview_print():
     preview_window = tk.Toplevel(root)
     preview_window.title("Print Preview")
 
-    canvas = tk.Canvas(preview_window, width=595, height=842)  # A4 size in points (1/72 of an inch)
+    canvas = tk.Canvas(
+        preview_window, width=595, height=842
+    )  # A4 size in points (1/72 of an inch)
     canvas.pack()
 
     x_offset = 50  # Initial x offset for the barcode images
     y_offset = 50  # Initial y offset for the barcode images
     photo_images = []  # List to keep references to PhotoImage objects
 
-    for i, (barcode_image, features_text) in enumerate(zip(barcode_images, features_list)):
+    for i, (barcode_image, features_text) in enumerate(
+        zip(barcode_images, features_list)
+    ):
         # Draw the barcode image on the canvas
-        barcode_image_resized = barcode_image.resize((200, 100))  # Resize for better fit
+        barcode_image_resized = barcode_image.resize(
+            (200, 100)
+        )  # Resize for better fit
         barcode_photo = ImageTk.PhotoImage(barcode_image_resized)
         canvas.create_image(x_offset, y_offset, anchor=tk.NW, image=barcode_photo)
         photo_images.append(barcode_photo)  # Store the reference
@@ -195,8 +213,10 @@ def preview_print():
         # Draw the text below the barcode image
         text_x = x_offset
         text_y = y_offset + 110  # Position below the barcode image
-        for line in features_text.split('\n'):
-            canvas.create_text(text_x, text_y, anchor=tk.NW, text=line, font=("Helvetica", 12))
+        for line in features_text.split("\n"):
+            canvas.create_text(
+                text_x, text_y, anchor=tk.NW, text=line, font=("Helvetica", 12)
+            )
             text_y += 20  # Line spacing
 
         # Update the x offset for the next barcode image
@@ -228,7 +248,7 @@ def print_label():
     for barcode_image in barcode_images:
         # This requires converting ImageTk format back to PIL Image
         barcode_image_pil = barcode_image.copy()
-        barcode_image_pil.save('barcode.png', 'PNG')
+        barcode_image_pil.save("barcode.png", "PNG")
 
         # Simulate printing barcode image (you need to adjust this part based on your label printer)
         print("Printing barcode image...")
@@ -259,7 +279,9 @@ def print_label():
 
             # Print the text below the barcode image
             text_x = margins
-            text_y = img_y + img_height + 20  # 20 tenths of a millimeter below the image
+            text_y = (
+                img_y + img_height + 20
+            )  # 20 tenths of a millimeter below the image
             hdc.TextOut(text_x, text_y, features_text)
 
             # End the page and document
@@ -272,33 +294,34 @@ def print_label():
 
 
 # Function to handle barcode scanning
+def on_barcode_entry_change(*args):
+    barcode_value = barcode_entry.get()
+    if len(barcode_value) == 13:
+        scan_barcode()
+
 def scan_barcode():
     barcode_value = barcode_entry.get()
-    if not barcode_value:
-        messagebox.showerror("Error", "Please enter a barcode value!")
-        return
+    if not barcode_value or len(barcode_value) != 13:
+        return  # Exit if not a valid 13-digit barcode
 
     print(f"Scanning barcode: {barcode_value}")  # Debug statement
+
     # Check if the product exists in the database
-    conn = sqlite3.connect('products.db')
+    conn = sqlite3.connect("products.db")
     cursor = conn.cursor()
-    cursor.execute('SELECT * FROM products WHERE barcode=?', (barcode_value,))
+    cursor.execute("SELECT * FROM products WHERE barcode=?", (barcode_value,))
     product = cursor.fetchone()
 
     if product:
         print(f"Product found: {product}")  # Debug statement
 
-        # Add product to the list for printing
-        listbox_products.insert(tk.END,
-                                f"ID: {product[0]}, Reel No.: {product[1]}, Size: {product[2]}, BF: {product[3]}, GSM: {product[4]}, Type: {product[5]}")
+        # Add product to the Treeview for display
+        treeview_products.insert(
+            "",
+            tk.END,
+            values=(product[0], product[1], product[2], product[3], product[4], product[5])
+        )
 
-        # Remove product from the database
-        cursor.execute('DELETE FROM products WHERE barcode=?', (barcode_value,))
-        conn.commit()
-        conn.close()
-
-        # Show success message
-        messagebox.showinfo("Success", "Product scanned and removed from database!")
     else:
         print("Product not found")  # Debug statement
         messagebox.showerror("Error", "Product not found in database!")
@@ -307,11 +330,22 @@ def scan_barcode():
     barcode_entry.delete(0, tk.END)
     run_new_script()
 
+def delete_selected_row_scanlist():
+    selected_item_scan = treeview_products.selection()
+    if not selected_item_scan:
+        messagebox.showerror("Error", "Please select a row to delete!")
+        return
+
+    # Delete the selected row(s) from the Treeview
+    for item in selected_item_scan:
+        treeview_products.delete(item)
+
+    messagebox.showinfo("Success", "Selected row(s) deleted from the list!")
 
 # Function to print scanned list
 def print_scanned_list():
     # Get all items from listbox_products
-    items = listbox_products.get(0, tk.END)
+    items = treeview_products.get(0, tk.END)
     if not items:
         messagebox.showinfo("Information", "No items to print.")
         return
@@ -327,23 +361,42 @@ def print_scanned_list():
     canvas_height = 842  # Height in points for A4
     img = Image.new("RGB", (canvas_width, canvas_height), "white")
     draw = ImageDraw.Draw(img)
-    font = ImageFont.truetype("arial.ttf", 16)  # Increase font size for better visibility
+    font = ImageFont.truetype(
+        "arial.ttf", 16
+    )  # Increase font size for better visibility
 
     # Add customer name at the top
-    draw.text((canvas_width / 2 - 150, 30), f"Customer: {customer_name}", font=font, fill="black")  # Adjusted text position
+    draw.text(
+        (canvas_width / 2 - 150, 30),
+        f"Customer: {customer_name}",
+        font=font,
+        fill="black",
+    )  # Adjusted text position
 
     # Define table parameters
     x_start = 20
     y_start = 100
     row_height = 40  # Adjusted row height for better spacing
-    column_widths = [70, 100, 100, 70, 70, 160]  # Adjusted column widths to fit page width
+    column_widths = [
+        70,
+        100,
+        100,
+        70,
+        70,
+        160,
+    ]  # Adjusted column widths to fit page width
     headers = ["ID", "Size", "GSM", "BF", "Print", "Product Type"]
 
     # Draw table headers
     x = x_start
     y = y_start
     for i, header in enumerate(headers):
-        draw.text((x + column_widths[i] / 2 - 10, y + row_height / 4 - 10), header, font=font, fill="black")
+        draw.text(
+            (x + column_widths[i] / 2 - 10, y + row_height / 4 - 10),
+            header,
+            font=font,
+            fill="black",
+        )
         x += column_widths[i]
 
     # Draw horizontal line below headers
@@ -357,23 +410,47 @@ def print_scanned_list():
         x += column_widths[i] if i < len(headers) else 0
 
     # Draw horizontal lines for table rows
-    draw.line([(x_start, y_start - row_height), (x_start + sum(column_widths), y_start - row_height)], fill="black")
-    draw.line([(x_start, y + len(items) * row_height), (x_start + sum(column_widths), y + len(items) * row_height)], fill="black")
+    draw.line(
+        [
+            (x_start, y_start - row_height),
+            (x_start + sum(column_widths), y_start - row_height),
+        ],
+        fill="black",
+    )
+    draw.line(
+        [
+            (x_start, y + len(items) * row_height),
+            (x_start + sum(column_widths), y + len(items) * row_height),
+        ],
+        fill="black",
+    )
 
     # Draw table content
     y = y_start + row_height
     for item in items:
         fields = item.split(", ")
         if len(fields) >= 4:
-            fields = [fields[0], fields[2], fields[4], "", "", fields[5]]  # Added empty fields for BF and Print
+            fields = [
+                fields[0],
+                fields[2],
+                fields[4],
+                "",
+                "",
+                fields[5],
+            ]  # Added empty fields for BF and Print
         x = x_start
         for i, field in enumerate(fields):
-            draw.text((x + column_widths[i] / 2 - 10, y + row_height / 2 - 10), field, font=font, fill="black")
+            draw.text(
+                (x + column_widths[i] / 2 - 10, y + row_height / 2 - 10),
+                field,
+                font=font,
+                fill="black",
+            )
             x += column_widths[i]
         y += row_height
 
     # Save the image as a temporary file
-    temp_file_path = 'scanned_list_preview.png'
+    temp_file_path = "scanned_list_preview.png"
     img.save(temp_file_path)
 
     # Print the image
@@ -420,15 +497,17 @@ def print_scanned_list():
         win32print.ClosePrinter(hprinter)
 
     # Optionally, clear the listbox after printing
-    listbox_products.delete(0, tk.END)
+    treeview_products.delete(0, tk.END)
 
 
 # Function to delete a row from the CSV file and database
 def delete_csv_row(row_index):
-    temp_file = 'temp_products_export.csv'
+    temp_file = "temp_products_export.csv"
     product_id = None
 
-    with open('products_export.csv', 'r') as csvfile, open(temp_file, 'w', newline='') as temp_csvfile:
+    with open("products_export.csv", "r") as csvfile, open(
+        temp_file, "w", newline=""
+    ) as temp_csvfile:
         reader = csv.reader(csvfile)
         writer = csv.writer(temp_csvfile)
 
@@ -438,15 +517,14 @@ def delete_csv_row(row_index):
             else:
                 writer.writerow(row)
 
-    os.replace(temp_file, 'products_export.csv')
+    os.replace(temp_file, "products_export.csv")
 
     if product_id:
-        conn = sqlite3.connect('products.db')
+        conn = sqlite3.connect("products.db")
         cursor = conn.cursor()
-        cursor.execute('DELETE FROM products WHERE id=?', (product_id,))
+        cursor.execute("DELETE FROM products WHERE id=?", (product_id,))
         conn.commit()
         conn.close()
-
 
 # Function to open a new window with CSV data
 def open_csv_window():
@@ -457,7 +535,11 @@ def open_csv_window():
     frame.pack(padx=20, pady=20, fill=tk.BOTH, expand=True)
 
     # Create the Treeview widget
-    tree = ttk.Treeview(frame, columns=("ID", "Reel No.", "Size", "BF", "GSM", "Product Type", "Barcode"), show="headings")
+    tree = ttk.Treeview(
+        frame,
+        columns=("ID", "Reel No.", "Size", "BF", "GSM", "Product Type", "Barcode"),
+        show="headings",
+    )
     tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
     # Define the column headings
@@ -491,11 +573,13 @@ def open_csv_window():
         tree.delete(selected_item)
 
     # Add a delete button
-    delete_button = ttk.Button(csv_window, text="Delete Selected Row", command=delete_selected_row)
+    delete_button = ttk.Button(
+        csv_window, text="Delete Selected Row", command=delete_selected_row
+    )
     delete_button.pack(pady=10)
 
     # Populate the Treeview with data from the CSV file
-    with open('products_export.csv', 'r') as csvfile:
+    with open("products_export.csv", "r") as csvfile:
         reader = csv.reader(csvfile)
         for row in reader:
             tree.insert("", tk.END, values=row)
@@ -503,7 +587,8 @@ def open_csv_window():
 
 # Function to toggle full screen
 def toggle_fullscreen(event=None):
-    root.state('zoomed')
+    root.state("zoomed")
+
 
 def print_preview_scanned_list():
     # Get the selected customer name
@@ -512,8 +597,8 @@ def print_preview_scanned_list():
         messagebox.showerror("Error", "Please select a customer!")
         return
 
-    # Get all items from listbox_products
-    items = listbox_products.get(0, tk.END)
+    # Get all items from treeview_products
+    items = treeview_products.get_children()
     if not items:
         messagebox.showinfo("Information", "No items to preview.")
         return
@@ -529,21 +614,35 @@ def print_preview_scanned_list():
     canvas.pack()
 
     # Add customer name at the top
-    canvas.create_text(canvas_width / 2, 30, text=f"Customer: {customer_name}", font=("Helvetica", 16, "bold"), anchor=tk.N)
+    canvas.create_text(
+        canvas_width / 2,
+        30,
+        text=f"Customer: {customer_name}",
+        font=("Helvetica", 16, "bold"),
+        anchor=tk.N,
+    )
 
     # Define table parameters
     x_start = 30
     y_start = 80
     row_height = 50  # Increased row height for spacing
     column_widths = [80, 100, 80, 80, 80, 80]  # Decreased column widths
-    headers = ["ID", "Size", "GSM", "BF", "Rate", "Type"]
+    headers = ["ID", "Reel No.", "Size", "BF", "GSM", "Type"]
 
     # Draw table headers
     x = x_start
     y = y_start
-    canvas.create_line(x_start, y_start, x_start + sum(column_widths), y_start, fill="black")
+    canvas.create_line(
+        x_start, y_start, x_start + sum(column_widths), y_start, fill="black"
+    )
     for i, header in enumerate(headers):
-        canvas.create_text(x + column_widths[i] / 2, y + row_height / 4, text=header, font=("Helvetica", 12, "bold"), anchor=tk.N)
+        canvas.create_text(
+            x + column_widths[i] / 2,
+            y + row_height / 4,
+            text=header,
+            font=("Helvetica", 12, "bold"),
+            anchor=tk.N,
+        )
         x += column_widths[i]
 
     # Draw horizontal line below headers
@@ -557,19 +656,44 @@ def print_preview_scanned_list():
         x += column_widths[i] if i < len(headers) else 0
 
     # Draw horizontal lines for table rows
-    canvas.create_line(x_start, y_start - row_height, x_start + sum(column_widths), y_start - row_height, fill="black")
-    canvas.create_line(x_start, y + len(items) * row_height, x_start + sum(column_widths), y + len(items) * row_height, fill="black")
+    canvas.create_line(
+        x_start,
+        y_start - row_height,
+        x_start + sum(column_widths),
+        y_start - row_height,
+        fill="black",
+    )
+    canvas.create_line(
+        x_start,
+        y + len(items) * row_height,
+        x_start + sum(column_widths),
+        y + len(items) * row_height,
+        fill="black",
+    )
 
     # Draw table content
     y = y_start + row_height
     for item in items:
-        fields = item.split(", ")
+        fields = treeview_products.item(item, "values")
         # Ensure fields align with the updated headers
         if len(fields) >= 4:
-            fields = [fields[0], fields[2], fields[4], "", "", fields[5]]  # Added empty fields for BF and Print
+            fields = [
+                fields[0],
+                fields[2],
+                fields[4],
+                "",
+                "",
+                fields[5],
+            ]  # Added empty fields for BF and Rate
         x = x_start
         for i, field in enumerate(fields):
-            canvas.create_text(x + column_widths[i] / 2, y + row_height / 2, text=field, font=("Helvetica", 12), anchor=tk.N)
+            canvas.create_text(
+                x + column_widths[i] / 2,
+                y + row_height / 2,
+                text=field,
+                font=("Helvetica", 12),
+                anchor=tk.N,
+            )
             x += column_widths[i]
         y += row_height
 
@@ -577,21 +701,16 @@ def print_preview_scanned_list():
     preview_window.mainloop()
 
 
-
-
-
 def print_preview(preview_window):
-    # Example function to handle printing
-    # You can use libraries like `reportlab` or `Pillow` to handle print functionality
-    # Placeholder for printing logic
+
     print("Printing the preview...")
     preview_window.destroy()
 
 
 def fetch_customer_names():
-    conn = sqlite3.connect('order_management.db')
+    conn = sqlite3.connect("order_management.db")
     cursor = conn.cursor()
-    cursor.execute('SELECT name FROM customers')
+    cursor.execute("SELECT name FROM customers")
     customer_names = [row[0] for row in cursor.fetchall()]
     conn.close()
     return customer_names
@@ -599,19 +718,16 @@ def fetch_customer_names():
 # Fetch customer names
 customer_names = fetch_customer_names()
 
-# Create a StringVar for the customer name
-
 # Function to update the dropdown list based on the current entry
 def update_customer_list(event):
     typed = selected_customer.get()
-    if typed == '':
-        customer_dropdown['values'] = fetch_customer_names()
+    if typed == "":
+        customer_dropdown["values"] = fetch_customer_names()
     else:
-        filtered_names = [name for name in fetch_customer_names() if typed.lower() in name.lower()]
-        customer_dropdown['values'] = filtered_names
-
-
-
+        filtered_names = [
+            name for name in fetch_customer_names() if typed.lower() in name.lower()
+        ]
+        customer_dropdown["values"] = filtered_names
 
 
 # Main application window
@@ -629,10 +745,7 @@ scrollbar = ttk.Scrollbar(main_frame, orient=tk.VERTICAL, command=canvas.yview)
 scrollable_frame = ttk.Frame(canvas)
 
 scrollable_frame.bind(
-    "<Configure>",
-    lambda e: canvas.configure(
-        scrollregion=canvas.bbox("all")
-    )
+    "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
 )
 
 canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
@@ -640,61 +753,50 @@ canvas.configure(yscrollcommand=scrollbar.set)
 
 canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-# Create a frame to hold input fields and label display
 input_frame = ttk.Frame(scrollable_frame)
 input_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
-
-# Fetch customer names
 customer_names = fetch_customer_names()
-
-# Create a StringVar for the customer name
-
-# Create the dropdown beside the scan barcode button
 selected_customer = tk.StringVar()
 
 # Create the dropdown beside the scan barcode button
-ttk.Label(scrollable_frame, text="Select Customer:").grid(row=5, column=3, padx=10, pady=10)
+ttk.Label(scrollable_frame, text="Select Customer:").grid(
+    row=5, column=3, padx=10, pady=10
+)
 customer_dropdown = ttk.Combobox(scrollable_frame, textvariable=selected_customer)
-customer_dropdown['values'] = fetch_customer_names()
+customer_dropdown["values"] = fetch_customer_names()
 customer_dropdown.grid(row=5, column=4, padx=10, pady=10)
 
 # Preview scanned list button
-print_preview_scanned_list_button = ttk.Button(scrollable_frame, text="Print Preview Scanned List", command=print_preview_scanned_list)
+print_preview_scanned_list_button = ttk.Button(
+    scrollable_frame,
+    text="Preview Scanned List",
+    command=print_preview_scanned_list,
+)
 print_preview_scanned_list_button.grid(row=9, column=0, columnspan=3, padx=10, pady=10)
 
-
-
 # Add a refresh button beside the dropdown
-refresh_button = ttk.Button(scrollable_frame, text="Refresh", command=refresh_customer_dropdown)
+refresh_button = ttk.Button(
+    scrollable_frame, text="Refresh", command=refresh_customer_dropdown
+)
 refresh_button.grid(row=5, column=5, padx=10, pady=10)
 # Hypothetical function to get customers
 if not customer_names:
     customer_names = ["No customers available"]
-customer_dropdown['values'] = customer_names
+customer_dropdown["values"] = customer_names
 customer_dropdown.current(0)
- # Set default value
-
-
-# Barcode scanning
-ttk.Label(scrollable_frame, text="Enter Barcode:").grid(row=5, column=0, padx=10, pady=10)
-barcode_entry = ttk.Entry(scrollable_frame)
-barcode_entry.grid(row=5, column=1, padx=10, pady=10)
-scan_button = ttk.Button(scrollable_frame, text="Scan Barcode", command=scan_barcode)
-scan_button.grid(row=5, column=2, padx=10, pady=10)
 
 # Fetch customer names
 customer_names = fetch_customer_names()
 
-# Create a StringVar for the customer name
-
 # Create the dropdown beside the scan barcode button
-ttk.Label(scrollable_frame, text="Select Customer:").grid(row=5, column=3, padx=10, pady=10)
+ttk.Label(scrollable_frame, text="Select Customer:").grid(
+    row=5, column=3, padx=10, pady=10
+)
 customer_dropdown = ttk.Combobox(scrollable_frame, textvariable=selected_customer)
-customer_dropdown['values'] = customer_names
+customer_dropdown["values"] = customer_names
 customer_dropdown.grid(row=5, column=4, padx=10, pady=10)
-customer_dropdown.bind('<KeyRelease>', update_customer_list)
-# Input fields
+customer_dropdown.bind("<KeyRelease>", update_customer_list)
+
 # Input fields
 ttk.Label(input_frame, text="Size:").grid(row=0, column=0, padx=10, pady=10)
 entry_size = ttk.Entry(input_frame)
@@ -711,10 +813,9 @@ entry_gsm.grid(row=2, column=1, padx=10, pady=10)
 ttk.Label(input_frame, text="Product Type:").grid(row=3, column=0, padx=10, pady=10)
 product_type = tk.StringVar()
 dropdown_product_type = ttk.Combobox(input_frame, textvariable=product_type)
-dropdown_product_type['values'] = ('semi', 'rg')
+dropdown_product_type["values"] = ("semi", "rg")
 dropdown_product_type.grid(row=3, column=1, padx=10, pady=10)
 dropdown_product_type.current(0)  # Set default value
-
 
 # Save button
 save_button = ttk.Button(input_frame, text="Save Product", command=save_product)
@@ -728,32 +829,46 @@ labels_display.grid(row=0, column=1, rowspan=3, padx=10, pady=10, sticky="ns")
 print_button = ttk.Button(scrollable_frame, text="Print Label", command=print_label)
 print_button.grid(row=4, column=0, padx=10, pady=10)
 
-preview_button = ttk.Button(scrollable_frame, text="Preview Label", command=preview_print)
+preview_button = ttk.Button(
+    scrollable_frame, text="Preview Label", command=preview_print
+)
 preview_button.grid(row=4, column=1, padx=10, pady=10)
 
-open_order_management_button = tk.Button(root, text="Open Order Management", command=open_order_management)
-open_order_management_button.pack(pady=20)
+open_order_management_button = tk.Button(
+    scrollable_frame, text="Open Order Management", command=open_order_management
+)
+open_order_management_button.grid(row=0, column=3, padx=10, pady=10)
 
-ttk.Label(scrollable_frame, text="Enter Barcode:").grid(row=5, column=0, padx=10, pady=10)
-barcode_entry = ttk.Entry(scrollable_frame)
+ttk.Label(scrollable_frame, text="Enter Barcode:").grid(
+    row=5, column=0, padx=10, pady=10
+)
+
+# Barcode entry linked to StringVar for automatic scanning
+barcode_var = tk.StringVar()
+barcode_var.trace("w", on_barcode_entry_change)
+
+barcode_entry = ttk.Entry(scrollable_frame, textvariable=barcode_var)
 barcode_entry.grid(row=5, column=1, padx=10, pady=10)
-scan_button = ttk.Button(scrollable_frame, text="Scan Barcode", command=scan_barcode)
-scan_button.grid(row=5, column=2, padx=10, pady=10)
 
-# Listbox for scanned products
-listbox_products = tk.Listbox(scrollable_frame)
-listbox_products.grid(row=6, column=0, columnspan=3, padx=10, pady=10)
+columns = ("ID", "Reel No.", "Size", "BF", "GSM", "Type")
+treeview_products = ttk.Treeview(scrollable_frame, columns=columns, show="headings",height=6)
+treeview_products.grid(row=6, column=0, columnspan=3, padx=10, pady=10)
 
+# Define the column headings
+for col in columns:
+    treeview_products.heading(col, text=col)
+    treeview_products.column(col, width=80)
+
+delete_button_scan = ttk.Button(scrollable_frame, text="Delete from list", command=delete_selected_row_scanlist)
+delete_button_scan.grid(row=7, column=1, columnspan=3, padx=10, pady=10)
 # Print scanned list button
-print_list_button = ttk.Button(scrollable_frame, text="Print Scanned List", command=print_scanned_list)
+print_list_button = ttk.Button(
+    scrollable_frame, text="Print Scanned List", command=print_scanned_list
+)
 print_list_button.grid(row=7, column=0, columnspan=3, padx=10, pady=10)
 
 # Open CSV data window button
 csv_button = ttk.Button(scrollable_frame, text="Open CSV Data", command=open_csv_window)
-csv_button.grid(row=10, column=0, columnspan=3, padx=10, pady=10)
-
-# Bind the F11 key to toggle fullscreen mode
+csv_button.grid(row=9, column=1, columnspan=3, padx=10, pady=10)
 root.bind("<F11>", toggle_fullscreen)
-
-# Run the application
 root.mainloop()
