@@ -28,7 +28,7 @@ c.execute(
     qty INTEGER NOT NULL,
     currDate TEXT NOT NULL,
     customerID INTEGER NOT NULL,
-    dispatched_qty INTEGER NOT NULL DEFAULT 0,  -- New column added
+    dispatched_qty INTEGER NOT NULL DEFAULT 0,  
     FOREIGN KEY(customerID) REFERENCES customers(id)
 );
 """
@@ -295,9 +295,6 @@ def view_all_orders(main_window):
             conn.commit()
             tree.delete(item)  # Remove the item from the Treeview
 
-        # Automatically refresh the customer orders view if open
-        view_customer_orders(main_window)
-
     # Add the Delete button
     delete_button = Button(
         view_all_orders_window,
@@ -439,15 +436,6 @@ def view_customer(main_window):
     view_customer_window.grid_rowconfigure(2, weight=1)
     view_customer_window.grid_columnconfigure(1, weight=1)
 
-
-# # Close the database connection when the GUI is closed
-# def on_closing():
-#     if conn:
-#         conn.close()
-#         products_conn.close()
-#     main_window.destroy()
-
-
 # Entry point to create the main window
 def main():
     global main_window  # Declare main_window as global to use it in on_closing
@@ -468,5 +456,5 @@ def main():
         text="View All Orders",
         command=lambda: view_all_orders(main_window),
     ).grid(row=0, column=2, padx=20, pady=20)
-    # main_window.protocol("WM_DELETE_WINDOW", on_closing)
+
     main_window.mainloop()
