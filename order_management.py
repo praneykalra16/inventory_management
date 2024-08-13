@@ -83,6 +83,7 @@ def add_customer(main_window):
                 "Success", "Customer and order details added successfully!"
             )
             add_customer_window.destroy()
+            main_window.destroy()
         else:
             messagebox.showerror(
                 "Error", "Customer name and at least one order are required!"
@@ -216,7 +217,10 @@ def view_all_orders(main_window):
                 (type_, size, gsm),
             )
             in_stock = pc.fetchone()[0]
-            status = "In Stock" if in_stock > 0 else "To Be Made"
+            if dispatched_qty == qty:
+                status = "Order Complete"
+            elif dispatched_qty>qty: status = "Extra reel dispatched"
+            else:status = "In Stock" if in_stock > 0 else "To Be Made"
 
             # Insert the order into the Treeview
             tree.insert(
@@ -284,7 +288,7 @@ def view_all_orders(main_window):
     tree.column("Qty", width=50)
     tree.column("Dispatched Qty", width=100)
     tree.column("Date", width=100)
-    tree.column("Status", width=100)
+    tree.column("Status", width=120)
 
     # Add a vertical scrollbar
     scrollbar = ttk.Scrollbar(frame, orient=VERTICAL, command=tree.yview)
