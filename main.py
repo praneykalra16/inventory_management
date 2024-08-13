@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, simpledialog
 import sqlite3
 import barcode
 from barcode.writer import ImageWriter
@@ -13,21 +13,17 @@ import os
 import win32print
 import win32ui
 from PIL import Image, ImageDraw, ImageFont, ImageWin
-
+import string
+import order_management
 
 barcode_images = []
 features_list = []
 
-import order_management
-
-
 def open_order_management():
     order_management.main()
 
-
 def run_new_script():
     subprocess.run(["python", "new.py"], check=True)
-
 
 def refreshcus(event=None):
     customer_names = fetch_customer_names()
@@ -45,7 +41,6 @@ def refresh_customer_dropdown():
         customer_dropdown.current(0)  # Optionally, set the first item as default
     else:
         customer_dropdown.set("")  # Clear the selection if no customers are available
-
 
 # Database setup
 def init_db():
@@ -67,11 +62,9 @@ def init_db():
     conn.commit()
     conn.close()
 
-
 # Initialize the database and run new.py script
 init_db()
 run_new_script()
-
 
 # Function to save product and generate barcode
 def get_last_id():
@@ -81,10 +74,6 @@ def get_last_id():
     last_id = cursor.fetchone()[0] or 0
     conn.close()
     return last_id
-
-
-import string
-
 
 def generate_reel_no(last_id):
     def increment_string(s):
@@ -113,7 +102,6 @@ def generate_reel_no(last_id):
     # Ensure reel_no is not empty
     reel_no = reel_no or "a"
     return f"{reel_no}{last_id % 1000 + 1}"
-
 
 def save_product():
     global barcode_images, features_list
@@ -172,12 +160,8 @@ def save_product():
     labels_display.insert(tk.END, features_text + "\n\n")
     labels_display.yview(tk.END)  # Auto-scroll to the end
 
-    # Show success message
-    messagebox.showinfo("Success", "Product saved and barcode generated!")
-
     # Run new.py script
     run_new_script()
-
 
 def preview_print():
     global barcode_images, features_list  # Access the global lists
@@ -229,7 +213,6 @@ def preview_print():
 
     # Show the preview window
     preview_window.mainloop()
-
 
 # Function to print label
 def print_label():
@@ -291,7 +274,6 @@ def print_label():
         finally:
             # Close the printer handle
             win32print.ClosePrinter(hprinter)
-
 
 # Function to handle barcode scanning
 def on_barcode_entry_change(*args):
@@ -478,12 +460,12 @@ def print_scanned_list():
         # Close the printer handle
         win32print.ClosePrinter(hprinter)
 
+    update_dispatched_qty()
     delete_rows_from_products_table()
 
     # Optionally, clear the Treeview after printing
     for item in items:
         treeview_products.delete(item)
-
 
 def delete_csv_row(row_index):
     temp_file = "temp_products_export.csv"
@@ -518,7 +500,6 @@ def delete_csv_row(row_index):
 
     except Exception as e:
         print(f"An error occurred: {e}")
-
 
 def open_csv_window():
     csv_window = tk.Toplevel(root)
@@ -583,7 +564,6 @@ def open_csv_window():
                 tree.insert("", tk.END, values=row)
     except Exception as e:
         print(f"An error occurred while reading the CSV file: {e}")
-
 
 def toggle_fullscreen(event=None):
     root.state("zoomed")
@@ -700,7 +680,6 @@ def print_preview_scanned_list():
 
 
 def print_preview(preview_window):
-
     print("Printing the preview...")
     preview_window.destroy()
 
@@ -820,10 +799,21 @@ def delete_rows_from_products_table():
     conn.commit()
     conn.close()
 
+def check_password():
+    while True:
+        password = simpledialog.askstring("Password", "Enter Password:", show="*")
+        if password == "epc81":
+            return
+        else:
+            messagebox.showerror("Error", "Incorrect Password! Please try again.")
+
 # Main application window
 root = ThemedTk(theme="breeze")
 root.title("Product Management")
 root.geometry("800x500")
+root.withdraw()  # Hide the window until the password is verified
+check_password()  # Prompt for the password
+root.deiconify()
 selected_customer = tk.StringVar(root)
 
 # Create a scrollable frame
@@ -957,8 +947,8 @@ print_list_button = ttk.Button(
 )
 print_list_button.grid(row=7, column=0, columnspan=3, padx=10, pady=10)
 
-update_button = tk.Button(scrollable_frame, text="Update Dispatched Quantity", command=update_dispatched_qty)
-update_button.grid(row=9, column=2, columnspan=3, padx=10, pady=10)
+# update_button = tk.Button(scrollable_frame, text="Update Dispatched Quantity", command=update_dispatched_qty)
+# update_button.grid(row=9, column=2, columnspan=3, padx=10, pady=10)
 
 # Open CSV data window button
 csv_button = ttk.Button(scrollable_frame, text="Open CSV Data", command=open_csv_window)
