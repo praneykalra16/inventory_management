@@ -446,9 +446,10 @@ def view_customer(main_window):
 
 # Entry point to create the main window
 def main():
-    global main_window  # Declare main_window as global to use it in on_closing
+    global main_window
     main_window = Tk()
     main_window.title("Order Management System")
+
     Button(
         main_window,
         text="Add New Customer/Order",
@@ -466,3 +467,4 @@ def main():
     ).grid(row=0, column=2, padx=20, pady=20)
 
     main_window.mainloop()
+
