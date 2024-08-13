@@ -1,20 +1,20 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 import sqlite3
-import barcode
 from barcode.writer import ImageWriter
 from barcode.ean import EAN13
-from PIL import Image, ImageTk
+from PIL import ImageTk
 from io import BytesIO
 import csv
 from ttkthemes import ThemedTk
-import subprocess
 import os
 import win32print
 import win32ui
 from PIL import Image, ImageDraw, ImageFont, ImageWin
 import string
 import order_management
+import new
+import datetime
 
 barcode_images = []
 features_list = []
@@ -23,7 +23,7 @@ def open_order_management():
     order_management.main()
 
 def run_new_script():
-    subprocess.run(["python", "new.py"], check=True)
+    new.runnew()
 
 def refreshcus(event=None):
     customer_names = fetch_customer_names()
@@ -131,8 +131,9 @@ def save_product():
 
     # Generate barcode
     barcode_str = f"{product_id:012d}"
-    ean = EAN13(barcode_str, writer=ImageWriter())  # Correct way to create the barcode
+    ean = EAN13(barcode_str, writer=ImageWriter())
     full_barcode_str = ean.get_fullcode()
+    ean.default_writer_options['write_text'] = False
     buffer = BytesIO()
     ean.write(buffer)
 
@@ -152,7 +153,7 @@ def save_product():
 
     # Display product features
     features_text = (
-        f"Reel No.: {reel_no}\nSize: {size}\nGSM: {gsm}\nType: {product_type_value}"
+        f"Reel No.: {reel_no}\nSize: {size}\nGSM: {gsm}\nType: {product_type_value}\nB_No.: {full_barcode_str}"
     )
     features_list.append(features_text)
 
@@ -174,10 +175,19 @@ def preview_print():
     preview_window = tk.Toplevel(root)
     preview_window.title("Print Preview")
 
+    frame = tk.Frame(preview_window)
+    frame.pack(fill=tk.BOTH, expand=True)
+
     canvas = tk.Canvas(
         preview_window, width=595, height=842
     )  # A4 size in points (1/72 of an inch)
     canvas.pack()
+    scrollbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=canvas.yview)
+    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+    # Configure the canvas to work with the scrollbar
+    canvas.configure(yscrollcommand=scrollbar.set)
+    canvas.bind('<Configure>', lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
 
     x_offset = 50  # Initial x offset for the barcode images
     y_offset = 50  # Initial y offset for the barcode images
@@ -199,7 +209,7 @@ def preview_print():
         text_y = y_offset + 110  # Position below the barcode image
         for line in features_text.split("\n"):
             canvas.create_text(
-                text_x, text_y, anchor=tk.NW, text=line, font=("Helvetica", 12)
+                text_x, text_y, anchor=tk.NW, text=line, font=("Arial", 12)
             )
             text_y += 20  # Line spacing
 
@@ -212,9 +222,12 @@ def preview_print():
             y_offset += 250
 
     # Show the preview window
+    canvas.configure(scrollregion=canvas.bbox("all"))
     preview_window.mainloop()
 
 # Function to print label
+from PIL import Image, ImageDraw
+
 def print_label():
     global barcode_images, features_list  # Access the global lists
 
@@ -222,58 +235,80 @@ def print_label():
         messagebox.showerror("Error", "Generate a barcode first!")
         return
 
-    # Replace this with the actual command or library function for your label printer
-    # For demonstration, we will print to console
-    for features_text in features_list:
-        print(f"Printing label...\n{features_text}")
+    labels_display.delete("1.0", tk.END)
 
-    # Optionally, you can also print the barcode images
-    for barcode_image in barcode_images:
-        # This requires converting ImageTk format back to PIL Image
-        barcode_image_pil = barcode_image.copy()
-        barcode_image_pil.save("barcode.png", "PNG")
+    # Set up the dimensions for A4 paper in points (1/72 of an inch)
+    a4_width = 595  # A4 width in points
+    a4_height = 842  # A4 height in points
+    margins = 50  # Margins in points
 
-        # Simulate printing barcode image (you need to adjust this part based on your label printer)
-        print("Printing barcode image...")
+    # Create a blank image for preview
+    page_image = Image.new("RGB", (a4_width, a4_height), "white")
+    draw = ImageDraw.Draw(page_image)
 
-        # Open the printer
-        printer_name = win32print.GetDefaultPrinter()
-        hprinter = win32print.OpenPrinter(printer_name)
+    # Initial offsets for placing content
+    x_offset = margins
+    y_offset = margins
 
-        try:
-            # Start a print job
-            hdc = win32ui.CreateDC()
-            hdc.CreatePrinterDC(printer_name)
-            hdc.StartDoc("Barcode Label")
-            hdc.StartPage()
+    for i, (barcode_image, features_text) in enumerate(zip(barcode_images, features_list)):
+        # Resize the barcode image to fit within the designated area
+        barcode_image_resized = barcode_image.resize((200, 100))
 
-            # Set up the print area and dimensions for A4 paper
-            a4_width = 2100  # A4 width in tenths of a millimeter (210 mm)
-            a4_height = 2970  # A4 height in tenths of a millimeter (297 mm)
-            margins = 100  # Margins in tenths of a millimeter (10 mm)
+        # Paste the barcode image onto the page image
+        page_image.paste(barcode_image_resized, (x_offset, y_offset))
 
-            # Print the barcode image
-            img_width, img_height = barcode_image_pil.size
-            img_x = margins
-            img_y = margins
-            img_rect = (img_x, img_y, img_x + img_width, img_y + img_height)
-            bmp = ImageWin.Dib(barcode_image_pil)
-            bmp.draw(hdc.GetHandleOutput(), img_rect)
+        # Print the text below the barcode image
+        text_x = x_offset
+        text_y = y_offset + barcode_image_resized.height + 10  # 10 points below the image
+        for line in features_text.split("\n"):
+            draw.text((text_x, text_y), line, fill="black")
+            text_y += 20  # Line spacing
 
-            # Print the text below the barcode image
-            text_x = margins
-            text_y = (
-                img_y + img_height + 20
-            )  # 20 tenths of a millimeter below the image
-            hdc.TextOut(text_x, text_y, features_text)
+        # Update the x offset for the next barcode image
+        x_offset += barcode_image_resized.width + 20  # 20 points of spacing
 
-            # End the page and document
-            hdc.EndPage()
-            hdc.EndDoc()
+        # Move to the next row if the barcodes exceed the page width
+        if x_offset + barcode_image_resized.width > a4_width - margins:
+            x_offset = margins
+            y_offset += barcode_image_resized.height + 50  # 50 points between rows
 
-        finally:
-            # Close the printer handle
-            win32print.ClosePrinter(hprinter)
+        # Move to a new page if the content exceeds the page height
+        if y_offset + barcode_image_resized.height + 50 > a4_height - margins:
+            # Save the current page as an image (if desired)
+            page_image.save(f"page_{i+1}.png")
+            # Reset for the new page
+            page_image = Image.new("RGB", (a4_width, a4_height), "white")
+            draw = ImageDraw.Draw(page_image)
+            x_offset = margins
+            y_offset = margins
+
+    # Save the final page image
+    page_image.save("page_final.png")
+
+    # Now you can open the image to view it or proceed with printing
+    page_image.show()
+
+    printer_name = win32print.GetDefaultPrinter()
+    hprinter = win32print.OpenPrinter(printer_name)
+
+    try:
+        # Start a print job
+        hdc = win32ui.CreateDC()
+        hdc.CreatePrinterDC(printer_name)
+        hdc.StartDoc("Barcode Label")
+        hdc.StartPage()
+
+        # Convert the page image to a bitmap and print it
+        img_width, img_height = page_image.size
+        bmp = ImageWin.Dib(page_image)
+        img_rect = (0, 0, img_width, img_height)
+        bmp.draw(hdc.GetHandleOutput(), img_rect)
+
+        hdc.EndPage()
+        hdc.EndDoc()
+
+    finally:
+        win32print.ClosePrinter(hprinter)
 
 # Function to handle barcode scanning
 def on_barcode_entry_change(*args):
@@ -283,7 +318,7 @@ def on_barcode_entry_change(*args):
 
 def scan_barcode():
     barcode_value = barcode_entry.get()
-    if not barcode_value or len(barcode_value) != 13:
+    if not barcode_value or len(barcode_value) != 13 :
         return  # Exit if not a valid 13-digit barcode
 
     print(f"Scanning barcode: {barcode_value}")  # Debug statement
@@ -341,36 +376,32 @@ def print_scanned_list():
     canvas_height = 842  # Height in points for A4
     img = Image.new("RGB", (canvas_width, canvas_height), "white")
     draw = ImageDraw.Draw(img)
-    font = ImageFont.truetype("arial.ttf", 16)  # Increase font size for better visibility
+    font = ImageFont.truetype("arial.ttf", 16)  # Adjust font size for better visibility
 
-    # Add customer name at the top
-    draw.text(
-        (canvas_width / 2 - 150, 30),
-        f"Customer: {customer_name}",
-        font=font,
-        fill="black",
-    )
+    current_date = datetime.datetime.now().strftime("%d-%m-%Y")
+
+    # Add date at the top left corner
+    draw.text((30, 40), f"Date: {current_date}", font=font, fill="black")
+
+    # Add customer name at the top center
+    draw.text((canvas_width / 2 -20 , 40), f"Customer: {customer_name}", font=font, fill="black")
 
     # Define table parameters
-    x_start = 20
-    y_start = 100
-    row_height = 40  # Adjusted row height for better spacing
-    column_widths = [
-        70,
-        100,
-        100,
-        70,
-        70,
-        160,
-    ]  # Adjusted column widths to fit page width
-    headers = ["ID", "Size", "GSM", "BF", "Print", "Product Type"]
+    x_start = 30
+    y_start = 80
+    row_height = 40  # Increased row height for better spacing
+    column_widths = [65, 95, 70, 70, 70, 70,60]  # Column widths aligned with preview
+    headers = ["S.No.", "Reel No.", "Size", "GSM", "Type", "BF","Rate"]
 
     # Draw table headers
     x = x_start
     y = y_start
+    draw.line([(
+        x_start, y_start),( x_start + sum(column_widths), y_start)], fill="black"
+    )
     for i, header in enumerate(headers):
         draw.text(
-            (x + column_widths[i] / 2 - 10, y + row_height / 4 - 10),
+            (x + column_widths[i] / 2 -20 , y + row_height / 4 -10),
             header,
             font=font,
             fill="black",
@@ -399,18 +430,28 @@ def print_scanned_list():
 
     # Draw table content
     y = y_start + row_height
-    for item in items:
-        # Retrieve the item values from Treeview
-        fields = treeview_products.item(item, 'values')
+    for i, item in enumerate(items, start=1):
+        fields = treeview_products.item(item, "values")
+        # Ensure fields align with the updated headers
+        if len(fields) >= 4:
+            fields = [
+                str(i),  # S.No. starting from 1
+                fields[1],  # Reel No.
+                fields[2],  # Size
+                fields[4],  # GSM
+                fields[5],  # Type
+                "",  # Empty for BF
+                "",  # Empty for Rate
+            ]
         x = x_start
-        for i, field in enumerate(fields):
+        for j, field in enumerate(fields):
             draw.text(
-                (x + column_widths[i] / 2 - 10, y + row_height / 2 - 10),
+                (x + column_widths[i] / 2 -20 , y + row_height / 2 -10 ),
                 field,
                 font=font,
                 fill="black",
             )
-            x += column_widths[i]
+            x += column_widths[j]
         y += row_height
 
     # Save the image as a temporary file
@@ -457,11 +498,9 @@ def print_scanned_list():
         hdc.EndDoc()
 
     finally:
-        # Close the printer handle
         win32print.ClosePrinter(hprinter)
 
     update_dispatched_qty()
-    delete_rows_from_products_table()
 
     # Optionally, clear the Treeview after printing
     for item in items:
@@ -591,10 +630,17 @@ def print_preview_scanned_list():
     canvas = tk.Canvas(preview_window, width=canvas_width, height=canvas_height)
     canvas.pack()
 
+    current_date = datetime.datetime.now().strftime("%d-%m-%Y")
+
+    # Add date at the top left corner
+    canvas.create_text(
+        30, 40, text=f"Date: {current_date}", font=("Helvetica", 12), anchor=tk.NW
+    )
+
     # Add customer name at the top
     canvas.create_text(
         canvas_width / 2,
-        30,
+        40,
         text=f"Customer: {customer_name}",
         font=("Helvetica", 16, "bold"),
         anchor=tk.N,
@@ -603,9 +649,9 @@ def print_preview_scanned_list():
     # Define table parameters
     x_start = 30
     y_start = 80
-    row_height = 50  # Increased row height for spacing
-    column_widths = [80, 100, 80, 80, 80, 80]  # Decreased column widths
-    headers = ["ID", "Reel No.", "Size", "BF", "GSM", "Type"]
+    row_height = 40  # Increased row height for spacing
+    column_widths = [70, 90, 70, 70, 70, 70,60]  # Decreased column widths
+    headers = ["S.No.", "Reel No.", "Size", "GSM", "Type", "BF","Rate"]
 
     # Draw table headers
     x = x_start
@@ -651,38 +697,37 @@ def print_preview_scanned_list():
 
     # Draw table content
     y = y_start + row_height
-    for item in items:
+    for i, item in enumerate(items, start=1):
         fields = treeview_products.item(item, "values")
         # Ensure fields align with the updated headers
         if len(fields) >= 4:
             fields = [
-                fields[0],
-                fields[2],
-                fields[4],
-                "",
-                "",
-                fields[5],
-            ]  # Added empty fields for BF and Rate
+                str(i),  # S.No. starting from 1
+                fields[1],  # Reel No.
+                fields[2],  # Size
+                fields[4],  # GSM
+                fields[5],  # Type
+                "",  # Empty for BF
+                "",  # Empty for Rate
+            ]
         x = x_start
-        for i, field in enumerate(fields):
+        for j, field in enumerate(fields):
             canvas.create_text(
-                x + column_widths[i] / 2,
+                x + column_widths[j] / 2,
                 y + row_height / 2,
                 text=field,
                 font=("Helvetica", 12),
                 anchor=tk.N,
             )
-            x += column_widths[i]
+            x += column_widths[j]
         y += row_height
 
     # Show the preview window
     preview_window.mainloop()
 
-
 def print_preview(preview_window):
     print("Printing the preview...")
     preview_window.destroy()
-
 
 def fetch_customer_names():
     conn = sqlite3.connect("order_management.db")
@@ -705,7 +750,6 @@ def update_customer_list(event):
             name for name in fetch_customer_names() if typed.lower() in name.lower()
         ]
         customer_dropdown["values"] = filtered_names
-
 
 def update_dispatched_qty():
     # Get selected customer name
@@ -779,18 +823,17 @@ def update_dispatched_qty():
         messagebox.showerror("Error", "Wrong reel scanned. Some items do not match with the orders.")
     else:
         messagebox.showinfo("Success", "Dispatched quantities updated successfully.")
+        delete_rows_from_products_table()
 
     conn_orders.commit()
     conn_orders.close()
     conn_products.close()
-
 
 def delete_rows_from_products_table():
     # Connect to the products database
     conn = sqlite3.connect("products.db")
     cursor = conn.cursor()
 
-    # Delete each product in the Treeview from the products table
     for item in treeview_products.get_children():
         product = treeview_products.item(item, 'values')
         product_id = product[0]  # Assuming the ID is the first column in the Treeview
@@ -798,11 +841,16 @@ def delete_rows_from_products_table():
 
     conn.commit()
     conn.close()
+    run_new_script()
 
 def check_password():
     while True:
         password = simpledialog.askstring("Password", "Enter Password:", show="*")
-        if password == "epc81":
+        if password is None:
+            # User pressed cancel or closed the dialog
+            root.destroy()
+            break
+        elif password == "epc81":
             return
         else:
             messagebox.showerror("Error", "Incorrect Password! Please try again.")
@@ -845,14 +893,6 @@ ttk.Label(scrollable_frame, text="Select Customer:").grid(
 customer_dropdown = ttk.Combobox(scrollable_frame, textvariable=selected_customer)
 customer_dropdown["values"] = fetch_customer_names()
 customer_dropdown.grid(row=5, column=4, padx=10, pady=10)
-
-# Preview scanned list button
-print_preview_scanned_list_button = ttk.Button(
-    scrollable_frame,
-    text="Preview Scanned List",
-    command=print_preview_scanned_list,
-)
-print_preview_scanned_list_button.grid(row=9, column=0, columnspan=3, padx=10, pady=10)
 
 # Add a refresh button beside the dropdown
 refresh_button = ttk.Button(
@@ -945,13 +985,18 @@ delete_button_scan.grid(row=7, column=1, columnspan=3, padx=10, pady=10)
 print_list_button = ttk.Button(
     scrollable_frame, text="Print Scanned List", command=print_scanned_list
 )
-print_list_button.grid(row=7, column=0, columnspan=3, padx=10, pady=10)
+print_list_button.grid(row=9, column=0, columnspan=3, padx=10, pady=10)
 
-# update_button = tk.Button(scrollable_frame, text="Update Dispatched Quantity", command=update_dispatched_qty)
-# update_button.grid(row=9, column=2, columnspan=3, padx=10, pady=10)
+# Preview scanned list button
+print_preview_scanned_list_button = ttk.Button(
+    scrollable_frame,
+    text="Preview Scanned List",
+    command=print_preview_scanned_list,
+)
+print_preview_scanned_list_button.grid(row=7, column=0, columnspan=3, padx=10, pady=10)
 
 # Open CSV data window button
-csv_button = ttk.Button(scrollable_frame, text="Open CSV Data", command=open_csv_window)
-csv_button.grid(row=9, column=1, columnspan=3, padx=10, pady=10)
+csv_button = ttk.Button(scrollable_frame, text="Open Stock Data", command=open_csv_window)
+csv_button.grid(row=4, column=2, columnspan=2, padx=10, pady=10)
 root.bind("<F11>", toggle_fullscreen)
 root.mainloop()
