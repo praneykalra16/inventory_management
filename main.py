@@ -409,7 +409,7 @@ def print_scanned_list():
     current_date = datetime.datetime.now().strftime("%d-%m-%Y")
     row_height = 40  # Increased row height for better spacing
     column_widths = [65, 95, 70, 70, 70, 70, 60]  # Column widths aligned with preview
-    headers = ["S.No.", "Reel No.", "Size", "GSM", "Type", "BF", "Rate"]
+    headers = ["S.No.", "Reel No.", "Size", "GSM", "Type", "BF", "Weight"]
 
     max_rows_per_page = 15  # Maximum number of rows per page
 
@@ -663,7 +663,7 @@ def print_preview_scanned_list():
     y_start = 80
     row_height = 40  # Increased row height for spacing
     column_widths = [70, 90, 70, 70, 70, 70,60]  # Decreased column widths
-    headers = ["S.No.", "Reel No.", "Size", "GSM", "Type", "BF","Rate"]
+    headers = ["S.No.", "Reel No.", "Size", "GSM", "Type", "BF","Weight"]
 
     # Draw table headers
     x = x_start
