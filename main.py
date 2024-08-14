@@ -225,9 +225,6 @@ def preview_print():
     canvas.configure(scrollregion=canvas.bbox("all"))
     preview_window.mainloop()
 
-# Function to print label
-from PIL import Image, ImageDraw
-
 def print_label():
     global barcode_images, features_list  # Access the global lists
 
@@ -242,17 +239,30 @@ def print_label():
     a4_height = 842  # A4 height in points
     margins = 50  # Margins in points
 
-    # Create a blank image for preview
-    page_image = Image.new("RGB", (a4_width, a4_height), "white")
-    draw = ImageDraw.Draw(page_image)
+    # Dimensions for a single label
+    label_width = 200
+    label_height = 150  # Adjusted to include text below the barcode
+    labels_per_row = 2
+    labels_per_page = 6
 
     # Initial offsets for placing content
     x_offset = margins
     y_offset = margins
+    label_count = 0
+    page_number = 1
+
+    def create_new_page(page_num):
+        # Create a blank image for a new page
+        new_page_image = Image.new("RGB", (a4_width, a4_height), "white")
+        new_draw = ImageDraw.Draw(new_page_image)
+        return new_page_image, new_draw
+
+    # Create the first page
+    page_image, draw = create_new_page(page_number)
 
     for i, (barcode_image, features_text) in enumerate(zip(barcode_images, features_list)):
         # Resize the barcode image to fit within the designated area
-        barcode_image_resized = barcode_image.resize((200, 100))
+        barcode_image_resized = barcode_image.resize((label_width, 100))
 
         # Paste the barcode image onto the page image
         page_image.paste(barcode_image_resized, (x_offset, y_offset))
@@ -264,26 +274,29 @@ def print_label():
             draw.text((text_x, text_y), line, fill="black")
             text_y += 20  # Line spacing
 
+        label_count += 1
+
         # Update the x offset for the next barcode image
-        x_offset += barcode_image_resized.width + 20  # 20 points of spacing
-
-        # Move to the next row if the barcodes exceed the page width
-        if x_offset + barcode_image_resized.width > a4_width - margins:
+        if label_count % labels_per_row == 0:
             x_offset = margins
-            y_offset += barcode_image_resized.height + 50  # 50 points between rows
+            y_offset += label_height + 50  # 50 points between rows
+        else:
+            x_offset += label_width + 20  # 20 points of spacing
 
-        # Move to a new page if the content exceeds the page height
-        if y_offset + barcode_image_resized.height + 50 > a4_height - margins:
-            # Save the current page as an image (if desired)
-            page_image.save(f"page_{i+1}.png")
+        # Move to a new page if 6 labels have been added
+        if label_count % labels_per_page == 0 and label_count != 0:
+            # Save the current page as an image
+            page_image.save(f"page_{page_number}.png")
+            page_number += 1
+
             # Reset for the new page
-            page_image = Image.new("RGB", (a4_width, a4_height), "white")
-            draw = ImageDraw.Draw(page_image)
+            page_image, draw = create_new_page(page_number)
             x_offset = margins
             y_offset = margins
 
     # Save the final page image
-    page_image.save("page_final.png")
+    if label_count % labels_per_page != 0:  # Only save if the last page has content
+        page_image.save(f"page_{page_number}.png")
 
     # Now you can open the image to view it or proceed with printing
     page_image.show()
@@ -296,19 +309,27 @@ def print_label():
         hdc = win32ui.CreateDC()
         hdc.CreatePrinterDC(printer_name)
         hdc.StartDoc("Barcode Label")
-        hdc.StartPage()
 
-        # Convert the page image to a bitmap and print it
-        img_width, img_height = page_image.size
-        bmp = ImageWin.Dib(page_image)
-        img_rect = (0, 0, img_width, img_height)
-        bmp.draw(hdc.GetHandleOutput(), img_rect)
+        for page_num in range(1, page_number + 1):
+            hdc.StartPage()
 
-        hdc.EndPage()
+            # Load the saved image
+            page_image = Image.open(f"page_{page_num}.png")
+
+            # Convert the page image to a bitmap and print it
+            img_width, img_height = page_image.size
+            bmp = ImageWin.Dib(page_image)
+            img_rect = (0, 0, img_width, img_height)
+            bmp.draw(hdc.GetHandleOutput(), img_rect)
+
+            hdc.EndPage()
         hdc.EndDoc()
 
     finally:
         win32print.ClosePrinter(hprinter)
+
+    barcode_images.clear()
+    features_list.clear()
 
 # Function to handle barcode scanning
 def on_barcode_entry_change(*args):
@@ -332,6 +353,15 @@ def scan_barcode():
     if product:
         print(f"Product found: {product}")  # Debug statement
 
+        reel_no = product[1]  # Assuming Reel No. is in the second column of the product data
+
+        # Check if the Reel No. is already in the Treeview
+        for item in treeview_products.get_children():
+            item_values = treeview_products.item(item, "values")
+            if item_values[1] == reel_no:  # Assuming Reel No. is in the second column
+                messagebox.showinfo("Information", "Reel No. already in dispatch list!")
+                barcode_entry.delete(0, tk.END)
+                return
         # Add product to the Treeview for display
         treeview_products.insert(
             "",
@@ -374,94 +404,79 @@ def print_scanned_list():
     # Create an image for the printout
     canvas_width = 595  # Width in points for A4
     canvas_height = 842  # Height in points for A4
-    img = Image.new("RGB", (canvas_width, canvas_height), "white")
-    draw = ImageDraw.Draw(img)
     font = ImageFont.truetype("arial.ttf", 16)  # Adjust font size for better visibility
 
     current_date = datetime.datetime.now().strftime("%d-%m-%Y")
-
-    # Add date at the top left corner
-    draw.text((30, 40), f"Date: {current_date}", font=font, fill="black")
-
-    # Add customer name at the top center
-    draw.text((canvas_width / 2 -20 , 40), f"Customer: {customer_name}", font=font, fill="black")
-
-    # Define table parameters
-    x_start = 30
-    y_start = 80
     row_height = 40  # Increased row height for better spacing
-    column_widths = [65, 95, 70, 70, 70, 70,60]  # Column widths aligned with preview
-    headers = ["S.No.", "Reel No.", "Size", "GSM", "Type", "BF","Rate"]
+    column_widths = [65, 95, 70, 70, 70, 70, 60]  # Column widths aligned with preview
+    headers = ["S.No.", "Reel No.", "Size", "GSM", "Type", "BF", "Rate"]
 
-    # Draw table headers
-    x = x_start
-    y = y_start
-    draw.line([(
-        x_start, y_start),( x_start + sum(column_widths), y_start)], fill="black"
-    )
-    for i, header in enumerate(headers):
-        draw.text(
-            (x + column_widths[i] / 2 -20 , y + row_height / 4 -10),
-            header,
-            font=font,
-            fill="black",
-        )
-        x += column_widths[i]
+    max_rows_per_page = 15  # Maximum number of rows per page
 
-    # Draw horizontal line below headers
-    y += row_height
-    draw.line([(x_start, y), (x_start + sum(column_widths), y)], fill="black")
+    # Function to draw the content of a page
+    def draw_page(draw, items_to_draw, page_number):
+        draw.text((30, 40), f"Date: {current_date}", font=font, fill="black")
+        draw.text((canvas_width / 2 - 25, 40), f"Customer: {customer_name}", font=font, fill="black")
 
-    # Draw vertical lines for table columns
-    x = x_start
-    for i in range(len(headers) + 1):
-        draw.line([(x, y_start), (x, y + len(items) * row_height)], fill="black")
-        x += column_widths[i] if i < len(headers) else 0
+        x = 30
+        y = 80
 
-    # Draw horizontal lines for table rows
-    draw.line(
-        [(x_start, y_start - row_height), (x_start + sum(column_widths), y_start - row_height)],
-        fill="black",
-    )
-    draw.line(
-        [(x_start, y + len(items) * row_height), (x_start + sum(column_widths), y + len(items) * row_height)],
-        fill="black",
-    )
+        # Draw table headers
+        draw.line([(x, y), (x + sum(column_widths), y)], fill="black")
+        for i, header in enumerate(headers):
+            draw.text((x + column_widths[i] / 2 - 20, y + row_height / 4 - 10), header, font=font, fill="black")
+            x += column_widths[i]
 
-    # Draw table content
-    y = y_start + row_height
-    for i, item in enumerate(items, start=1):
-        fields = treeview_products.item(item, "values")
-        # Ensure fields align with the updated headers
-        if len(fields) >= 4:
-            fields = [
-                str(i),  # S.No. starting from 1
-                fields[1],  # Reel No.
-                fields[2],  # Size
-                fields[4],  # GSM
-                fields[5],  # Type
-                "",  # Empty for BF
-                "",  # Empty for Rate
-            ]
-        x = x_start
-        for j, field in enumerate(fields):
-            draw.text(
-                (x + column_widths[i] / 2 -20 , y + row_height / 2 -10 ),
-                field,
-                font=font,
-                fill="black",
-            )
-            x += column_widths[j]
+        # Draw horizontal line below headers
         y += row_height
+        draw.line([(30, y), (30 + sum(column_widths), y)], fill="black")
 
-    # Save the image as a temporary file
-    temp_file_path = "scanned_list_preview.png"
-    img.save(temp_file_path)
+        # Draw table content
+        for i, item in enumerate(items_to_draw):
+            fields = treeview_products.item(item, "values")
+            if len(fields) >= 4:
+                fields = [
+                    str(i + 1 + (page_number - 1) * max_rows_per_page),  # S.No.
+                    fields[1],  # Reel No.
+                    fields[2],  # Size
+                    fields[4],  # GSM
+                    fields[5],  # Type
+                    "",  # Empty for BF
+                    "",  # Empty for Rate
+                ]
+            x = 30
+            for j, field in enumerate(fields):
+                draw.text((x + column_widths[j] / 2 - 20, y + row_height / 4), field, font=font, fill="black")
+                x += column_widths[j]
+            y += row_height
 
-    # Print the image
+        # Draw vertical lines for table columns
+        x = 30
+        for i in range(len(headers) + 1):
+            draw.line([(x, 80), (x, y)], fill="black")
+            x += column_widths[i] if i < len(headers) else 0
+
+        # Draw horizontal line at the bottom of the table
+        draw.line([(30, y), (30 + sum(column_widths), y)], fill="black")
+
+    # Split items into pages
+    pages = [items[i:i + max_rows_per_page] for i in range(0, len(items), max_rows_per_page)]
+    temp_file_paths = []
+
+    # Create images for each page
+    for page_number, items_on_page in enumerate(pages, start=1):
+        img = Image.new("RGB", (canvas_width, canvas_height), "white")
+        draw = ImageDraw.Draw(img)
+        draw_page(draw, items_on_page, page_number)
+
+        # Save the image as a temporary file
+        temp_file_path = f"scanned_list_page_{page_number}.png"
+        img.save(temp_file_path)
+        temp_file_paths.append(temp_file_path)
+
+    # Print each page
     print("Printing scanned list...")
 
-    # Open the printer
     printer_name = win32print.GetDefaultPrinter()
     hprinter = win32print.OpenPrinter(printer_name)
 
@@ -470,31 +485,28 @@ def print_scanned_list():
         hdc = win32ui.CreateDC()
         hdc.CreatePrinterDC(printer_name)
         hdc.StartDoc("Scanned List Print")
-        hdc.StartPage()
 
-        # Set up the print area and dimensions for A4 paper
-        a4_width = 2100  # A4 width in tenths of a millimeter (210 mm)
-        a4_height = 2970  # A4 height in tenths of a millimeter (297 mm)
-        margins = 100  # Margins in tenths of a millimeter (10 mm)
+        for temp_file_path in temp_file_paths:
+            hdc.StartPage()
 
-        # Open the image and prepare for printing
-        img_pil = Image.open(temp_file_path)
-        img_width, img_height = img_pil.size
-        scale_x = a4_width / img_width
-        scale_y = a4_height / img_height
-        scale = min(scale_x, scale_y)
+            # Open the image and prepare for printing
+            img_pil = Image.open(temp_file_path)
+            img_width, img_height = img_pil.size
+            scale_x = 2100 / img_width  # A4 width in tenths of a millimeter (210 mm)
+            scale_y = 2970 / img_height  # A4 height in tenths of a millimeter (297 mm)
+            scale = min(scale_x, scale_y)
 
-        img_width_scaled = int(img_width * scale)
-        img_height_scaled = int(img_height * scale)
+            img_width_scaled = int(img_width * scale)
+            img_height_scaled = int(img_height * scale)
 
-        img_x = (a4_width - img_width_scaled) // 2
-        img_y = (a4_height - img_height_scaled) // 2
-        img_rect = (img_x, img_y, img_x + img_width_scaled, img_y + img_height_scaled)
-        bmp = ImageWin.Dib(img_pil.resize((img_width_scaled, img_height_scaled)))
-        bmp.draw(hdc.GetHandleOutput(), img_rect)
+            img_x = (2100 - img_width_scaled) // 2
+            img_y = (2970 - img_height_scaled) // 2
+            img_rect = (img_x, img_y, img_x + img_width_scaled, img_y + img_height_scaled)
+            bmp = ImageWin.Dib(img_pil.resize((img_width_scaled, img_height_scaled)))
+            bmp.draw(hdc.GetHandleOutput(), img_rect)
 
-        # End the page and document
-        hdc.EndPage()
+            hdc.EndPage()
+
         hdc.EndDoc()
 
     finally:
@@ -970,14 +982,28 @@ barcode_var.trace("w", on_barcode_entry_change)
 barcode_entry = ttk.Entry(scrollable_frame, textvariable=barcode_var)
 barcode_entry.grid(row=5, column=1, padx=10, pady=10)
 
+
+# Create a frame for the Treeview and the scrollbar
+treeview_frame = tk.Frame(scrollable_frame)
+treeview_frame.grid(row=6, column=0, columnspan=3, padx=10, pady=10)
+
+# Create a vertical scrollbar
+treeview_scrollbar = ttk.Scrollbar(treeview_frame, orient="vertical")
+treeview_scrollbar.pack(side="right", fill="y")
+
+# Create the Treeview widget
 columns = ("ID", "Reel No.", "Size", "BF", "GSM", "Type")
-treeview_products = ttk.Treeview(scrollable_frame, columns=columns, show="headings",height=6)
-treeview_products.grid(row=6, column=0, columnspan=3, padx=10, pady=10)
+treeview_products = ttk.Treeview(treeview_frame, columns=columns, show="headings", height=6, yscrollcommand=treeview_scrollbar.set)
+treeview_products.pack(side="left", fill="both", expand=True)
+
+# Configure the scrollbar to scroll the Treeview
+treeview_scrollbar.config(command=treeview_products.yview)
 
 # Define the column headings
 for col in columns:
     treeview_products.heading(col, text=col)
     treeview_products.column(col, width=80)
+
 
 delete_button_scan = ttk.Button(scrollable_frame, text="Delete from list", command=delete_selected_row_scanlist)
 delete_button_scan.grid(row=7, column=1, columnspan=3, padx=10, pady=10)
