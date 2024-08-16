@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 import sqlite3
+import win32con
 from barcode.writer import ImageWriter
 from barcode.ean import EAN13
 from PIL import ImageTk
@@ -131,6 +132,7 @@ def save_product():
 
     # Generate barcode
     barcode_str = f"{product_id:012d}"
+    print(barcode_str)
     ean = EAN13(barcode_str, writer=ImageWriter())
     full_barcode_str = ean.get_fullcode()
     ean.default_writer_options['write_text'] = False
@@ -237,7 +239,7 @@ def print_label():
     # Set up the dimensions for A4 paper in points (1/72 of an inch)
     a4_width = 595  # A4 width in points
     a4_height = 842  # A4 height in points
-    margins = 50  # Margins in points
+    margins = 10  # Margins in points
 
     # Dimensions for a single label
     label_width = 200
@@ -246,8 +248,8 @@ def print_label():
     labels_per_page = 6
 
     # Initial offsets for placing content
-    x_offset = margins
-    y_offset = margins
+    x_offset = margins +10
+    y_offset = margins +10
     label_count = 0
     page_number = 1
 
@@ -268,7 +270,7 @@ def print_label():
         page_image.paste(barcode_image_resized, (x_offset, y_offset))
 
         # Print the text below the barcode image
-        text_x = x_offset
+        text_x = x_offset +50
         text_y = y_offset + barcode_image_resized.height + 10  # 10 points below the image
         for line in features_text.split("\n"):
             draw.text((text_x, text_y), line, fill="black")
@@ -279,9 +281,9 @@ def print_label():
         # Update the x offset for the next barcode image
         if label_count % labels_per_row == 0:
             x_offset = margins
-            y_offset += label_height + 50  # 50 points between rows
+            y_offset += label_height + 130  # 50 points between rows
         else:
-            x_offset += label_width + 20  # 20 points of spacing
+            x_offset += label_width + 70  # 20 points of spacing
 
         # Move to a new page if 6 labels have been added
         if label_count % labels_per_page == 0 and label_count != 0:
@@ -298,35 +300,46 @@ def print_label():
     if label_count % labels_per_page != 0:  # Only save if the last page has content
         page_image.save(f"page_{page_number}.png")
 
-    # Now you can open the image to view it or proceed with printing
-    page_image.show()
 
-    printer_name = win32print.GetDefaultPrinter()
-    hprinter = win32print.OpenPrinter(printer_name)
-
-    try:
-        # Start a print job
-        hdc = win32ui.CreateDC()
-        hdc.CreatePrinterDC(printer_name)
-        hdc.StartDoc("Barcode Label")
-
-        for page_num in range(1, page_number + 1):
-            hdc.StartPage()
-
-            # Load the saved image
-            page_image = Image.open(f"page_{page_num}.png")
-
-            # Convert the page image to a bitmap and print it
-            img_width, img_height = page_image.size
-            bmp = ImageWin.Dib(page_image)
-            img_rect = (0, 0, img_width, img_height)
-            bmp.draw(hdc.GetHandleOutput(), img_rect)
-
-            hdc.EndPage()
-        hdc.EndDoc()
-
-    finally:
-        win32print.ClosePrinter(hprinter)
+    # printer_name = win32print.GetDefaultPrinter()
+    # hprinter = win32print.OpenPrinter(printer_name)
+    #
+    # try:
+    #     # Start a print job
+    #     hdc = win32ui.CreateDC()
+    #     hdc.CreatePrinterDC(printer_name)
+    #     hdc.StartDoc("Barcode Label")
+    #
+    #     for page_num in range(1, page_number + 1):
+    #         hdc.StartPage()
+    #
+    #         # Load the saved image
+    #         page_image = Image.open(f"page_{page_num}.png")
+    #         img_width, img_height = page_image.size
+    #
+    #         # Get the image DPI and scale it to print size
+    #         img_dpi = page_image.info.get('dpi', (300, 300))  # Default to 300 DPI if not provided
+    #         img_width_inches = img_width / img_dpi[0]
+    #         img_height_inches = img_height / img_dpi[1]
+    #
+    #         # Convert inches to printer points (1 inch = 72 points)
+    #         img_width_points = int(img_width_inches * 72)
+    #         img_height_points = int(img_height_inches * 72)
+    #
+    #         # Calculate the position to center the image on the page
+    #         x_offset = int((a4_width - img_width_points) // 2)
+    #         y_offset = int((a4_height - img_height_points) // 2)
+    #
+    #         # Use GDI+ API to draw the image on the printer's DC
+    #         dib = ImageWin.Dib(page_image)
+    #         dib.draw(hdc.GetHandleOutput(),
+    #                  (x_offset, y_offset, x_offset + img_width_points, y_offset + img_height_points))
+    #
+    #         hdc.EndPage()
+    #     hdc.EndDoc()
+    #
+    # finally:
+    #     win32print.ClosePrinter(hprinter)
 
     barcode_images.clear()
     features_list.clear()
@@ -408,15 +421,15 @@ def print_scanned_list():
 
     current_date = datetime.datetime.now().strftime("%d-%m-%Y")
     row_height = 40  # Increased row height for better spacing
-    column_widths = [65, 95, 70, 70, 70, 70, 60]  # Column widths aligned with preview
-    headers = ["S.No.", "Reel No.", "Size", "GSM", "Type", "BF", "Weight"]
+    column_widths = [65, 70, 70, 70, 70, 80]  # Column widths aligned with preview
+    headers = ["S.No.", "Size", "GSM", "Type", "BF", "Weight"]
 
     max_rows_per_page = 15  # Maximum number of rows per page
 
     # Function to draw the content of a page
     def draw_page(draw, items_to_draw, page_number):
         draw.text((30, 40), f"Date: {current_date}", font=font, fill="black")
-        draw.text((canvas_width / 2 - 25, 40), f"Customer: {customer_name}", font=font, fill="black")
+        draw.text((canvas_width / 2 - 35, 40), f"Customer: {customer_name}", font=font, fill="black")
 
         x = 30
         y = 80
@@ -437,7 +450,6 @@ def print_scanned_list():
             if len(fields) >= 4:
                 fields = [
                     str(i + 1 + (page_number - 1) * max_rows_per_page),  # S.No.
-                    fields[1],  # Reel No.
                     fields[2],  # Size
                     fields[4],  # GSM
                     fields[5],  # Type
@@ -477,40 +489,40 @@ def print_scanned_list():
     # Print each page
     print("Printing scanned list...")
 
-    printer_name = win32print.GetDefaultPrinter()
-    hprinter = win32print.OpenPrinter(printer_name)
-
-    try:
-        # Start a print job
-        hdc = win32ui.CreateDC()
-        hdc.CreatePrinterDC(printer_name)
-        hdc.StartDoc("Scanned List Print")
-
-        for temp_file_path in temp_file_paths:
-            hdc.StartPage()
-
-            # Open the image and prepare for printing
-            img_pil = Image.open(temp_file_path)
-            img_width, img_height = img_pil.size
-            scale_x = 2100 / img_width  # A4 width in tenths of a millimeter (210 mm)
-            scale_y = 2970 / img_height  # A4 height in tenths of a millimeter (297 mm)
-            scale = min(scale_x, scale_y)
-
-            img_width_scaled = int(img_width * scale)
-            img_height_scaled = int(img_height * scale)
-
-            img_x = (2100 - img_width_scaled) // 2
-            img_y = (2970 - img_height_scaled) // 2
-            img_rect = (img_x, img_y, img_x + img_width_scaled, img_y + img_height_scaled)
-            bmp = ImageWin.Dib(img_pil.resize((img_width_scaled, img_height_scaled)))
-            bmp.draw(hdc.GetHandleOutput(), img_rect)
-
-            hdc.EndPage()
-
-        hdc.EndDoc()
-
-    finally:
-        win32print.ClosePrinter(hprinter)
+    # printer_name = win32print.GetDefaultPrinter()
+    # hprinter = win32print.OpenPrinter(printer_name)
+    #
+    # try:
+    #     # Start a print job
+    #     hdc = win32ui.CreateDC()
+    #     hdc.CreatePrinterDC(printer_name)
+    #     hdc.StartDoc("Scanned List Print")
+    #
+    #     for temp_file_path in temp_file_paths:
+    #         hdc.StartPage()
+    #
+    #         # Open the image and prepare for printing
+    #         img_pil = Image.open(temp_file_path)
+    #         img_width, img_height = img_pil.size
+    #         scale_x = 2100 / img_width  # A4 width in tenths of a millimeter (210 mm)
+    #         scale_y = 2970 / img_height  # A4 height in tenths of a millimeter (297 mm)
+    #         scale = min(scale_x, scale_y)
+    #
+    #         img_width_scaled = int(img_width * scale)
+    #         img_height_scaled = int(img_height * scale)
+    #
+    #         img_x = (2100 - img_width_scaled) // 2
+    #         img_y = (2970 - img_height_scaled) // 2
+    #         img_rect = (img_x, img_y, img_x + img_width_scaled, img_y + img_height_scaled)
+    #         bmp = ImageWin.Dib(img_pil.resize((img_width_scaled, img_height_scaled)))
+    #         bmp.draw(hdc.GetHandleOutput(), img_rect)
+    #
+    #         hdc.EndPage()
+    #
+    #     hdc.EndDoc()
+    #
+    # finally:
+    #     win32print.ClosePrinter(hprinter)
 
     update_dispatched_qty()
 
@@ -662,8 +674,8 @@ def print_preview_scanned_list():
     x_start = 30
     y_start = 80
     row_height = 40  # Increased row height for spacing
-    column_widths = [70, 90, 70, 70, 70, 70,60]  # Decreased column widths
-    headers = ["S.No.", "Reel No.", "Size", "GSM", "Type", "BF","Weight"]
+    column_widths = [70, 70, 70, 70, 70,80]  # Decreased column widths
+    headers = ["S.No.", "Size", "GSM", "Type", "BF","Weight"]
 
     # Draw table headers
     x = x_start
@@ -715,7 +727,6 @@ def print_preview_scanned_list():
         if len(fields) >= 4:
             fields = [
                 str(i),  # S.No. starting from 1
-                fields[1],  # Reel No.
                 fields[2],  # Size
                 fields[4],  # GSM
                 fields[5],  # Type
